@@ -996,6 +996,10 @@ void fill_grid(GtkWidget *grid, char **fen_array)
       gtk_text_buffer_set_text(gtk_text_view_get_buffer((GtkTextView *)comment_text_view),
                                moves[move_no].black_comment, 
                                -1);
+    else
+      gtk_text_buffer_set_text(gtk_text_view_get_buffer((GtkTextView *)comment_text_view),
+                               "", 
+                               -1);
   }
 
   gtk_widget_show_all((GtkWidget *)window);
@@ -1078,7 +1082,7 @@ void create_annotation_window()
 {
   GtkWidget *win = gtk_window_new(GTK_WINDOW_TOPLEVEL);
   gtk_window_set_default_size (GTK_WINDOW(win),
-                               200, 100);
+                               500, 200);
 
   gtk_window_set_transient_for((GtkWindow *)win, (GtkWindow *)window);
 
@@ -1101,7 +1105,7 @@ void create_annotation_window()
   gtk_box_pack_start (GTK_BOX (hbox), ok, FALSE, FALSE, 0);
   gtk_box_pack_start (GTK_BOX (hbox), cancel, FALSE, FALSE, 0);
 
-  gtk_box_pack_start (GTK_BOX (vbox), scrolled_win, FALSE, FALSE, 0);
+  gtk_box_pack_start (GTK_BOX (vbox), scrolled_win, TRUE, TRUE, 0);
   gtk_box_pack_start (GTK_BOX (vbox), hbox, FALSE, FALSE, 0);
 
   gtk_container_add (GTK_CONTAINER (win), vbox);
