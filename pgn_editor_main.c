@@ -3,12 +3,12 @@
 
   This file is part of PGN Editor.
 
-  pLisp is free software: you can redistribute it and/or modify
+  PGN Editor is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
   the Free Software Foundation, either version 3 of the License, or
   (at your option) any later version.
 
-  pLisp is distributed in the hope that it will be useful,
+  PGN Editor is distributed in the hope that it will be useful,
   but WITHOUT ANY WARRANTY; without even the implied warranty of
   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
   GNU General Public License for more details.
@@ -1076,7 +1076,7 @@ void unhighlight_all_moves()
   }
 }
 
-void test(GtkTextView *view, GdkEventButton *event, gpointer data)
+void select_move(GtkTextView *view, GdkEventButton *event, gpointer data)
 {
   gint x, y;
   GtkTextIter iter, match_start1, match_end1, match_start2, match_end2;
@@ -1218,7 +1218,7 @@ int main(int argc, char *argv[])
   gtk_text_view_set_editable((GtkTextView *)moves_text_view, FALSE);
   gtk_text_view_set_cursor_visible((GtkTextView *)moves_text_view, FALSE);
 
-  g_signal_connect (moves_text_view, "button_press_event", G_CALLBACK (test), NULL);
+  g_signal_connect (moves_text_view, "button_press_event", G_CALLBACK (select_move), NULL);
 
   gtk_container_add (GTK_CONTAINER (scrolled_win1), moves_text_view);  
 
