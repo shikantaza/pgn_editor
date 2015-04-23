@@ -64,6 +64,7 @@ void convert_fen_string_to_fen_array(char *, char **);
 void fill_grid(GtkWidget *, char **);
 void populate_moves_text_view();
 void save();
+void unhighlight_all_moves();
 
 inline int min(int a, int b) { return (a <= b) ? a : b; }
 inline int max(int a, int b) { return (a >= b) ? a : b; }
@@ -724,8 +725,16 @@ void move_forward()
 
 void move_backward()
 {
-  if(move_no == 0 &&  ply_no == 1)
+  if(move_no == 0 && ply_no == 0)
     return;
+
+  if(move_no == 0 &&  ply_no == 1)
+  {
+    highlight_ply(false, 0, 1);
+    fill_grid(grid, fens[0]);
+    ply_no = 0;
+    return;
+  }
 
   if(ply_no == 2)
   {
@@ -813,6 +822,29 @@ void clear_board(GtkWidget *widget, gpointer data)
   fill_grid(grid, fens[0]);
 }
 
+void move_to_start_pos()
+{
+  unhighlight_all_moves();
+  move_no = 0;
+  ply_no = 0;
+  fill_grid(grid, fens[0]);
+}
+
+void move_to_end()
+{
+  move_no = nof_moves-1;
+
+  if(strlen(moves[move_no].black_move) > 0)
+    ply_no = 2;
+  else
+    ply_no = 1;
+
+  unhighlight_all_moves();
+  highlight_ply(true, move_no, ply_no);
+
+  fill_grid(grid, fens[2*move_no + ply_no]);
+}
+
 gboolean handle_key_press_events(GtkWidget *widget, GdkEventKey *event, gpointer user_data)
 {
   if(widget == (GtkWidget *)window && (event->state & GDK_CONTROL_MASK) && event->keyval == GDK_KEY_l)
@@ -823,6 +855,10 @@ gboolean handle_key_press_events(GtkWidget *widget, GdkEventKey *event, gpointer
     move_backward();
   else if(widget == (GtkWidget *)window && event->keyval == GDK_KEY_Right)
     move_forward();
+  else if(widget == (GtkWidget *)window && event->keyval == GDK_KEY_Home)
+    move_to_start_pos();
+  else if(widget == (GtkWidget *)window && event->keyval == GDK_KEY_End)
+    move_to_end();
   else if(widget == (GtkWidget *)window && (event->state & GDK_CONTROL_MASK) && event->keyval == GDK_KEY_a)
     annot();
   else if(widget == (GtkWidget *)window && (event->state & GDK_CONTROL_MASK) && event->keyval == GDK_KEY_q)
@@ -951,9 +987,16 @@ void fill_grid(GtkWidget *grid, char **fen_array)
   }
 
   if(moves)
-    gtk_text_buffer_set_text(gtk_text_view_get_buffer((GtkTextView *)comment_text_view),
-                             ply_no == 1 ? moves[move_no].white_comment : moves[move_no].black_comment, 
+  {
+    if(ply_no == 1 && strlen(moves[move_no].white_comment) > 0)
+      gtk_text_buffer_set_text(gtk_text_view_get_buffer((GtkTextView *)comment_text_view),
+                             moves[move_no].white_comment, 
                              -1);
+    else if(ply_no == 2 && strlen(moves[move_no].black_comment) > 0)
+      gtk_text_buffer_set_text(gtk_text_view_get_buffer((GtkTextView *)comment_text_view),
+                               moves[move_no].black_comment, 
+                               -1);
+  }
 
   gtk_widget_show_all((GtkWidget *)window);
 }
@@ -1183,11 +1226,11 @@ void select_move(GtkTextView *view, GdkEventButton *event, gpointer data)
 
   unhighlight_all_moves();
 
-  int mv_no = gtk_text_iter_get_line(&iter);
-  int ply_num = (white_move == true) ? 1 : 2;
+  move_no = gtk_text_iter_get_line(&iter);
+  ply_no = (white_move == true) ? 1 : 2;
 
-  fill_grid(grid, fens[2*mv_no + ply_num]);
-  highlight_ply(true, mv_no, ply_num);
+  fill_grid(grid, fens[2*move_no + ply_no]);
+  highlight_ply(true, move_no, ply_no);
 }
 
 int main(int argc, char *argv[])
