@@ -145,60 +145,62 @@ move_text: moves result
 
          moves = (move_t *)realloc(moves, nof_moves * sizeof(move_t));
 
-         moves[nof_moves - 1] = create_move($2.white_move, $2.white_comment, "", "");
+	 moves[nof_moves - 1] = $2;
        };
 
 moves: /* empty */
        {
+	 in_move_text = true;
          nof_moves = 0;
+	 if(moves)
+	   free(moves);
+	 moves = NULL;
        }
-       | 
+       |
        moves move
        {
          nof_moves++;
 
-         moves = (move_t *)realloc(moves, nof_moves * sizeof(move_t));
+	 if(!moves)
+	   moves = (move_t *)malloc(nof_moves * sizeof(move_t));
+	 else
+	   moves = (move_t *)realloc(moves, nof_moves * sizeof(move_t));
 
-         moves[nof_moves - 1] = create_move($2.white_move, $2.white_comment, $2.black_move, $2.black_comment);
+	 moves[nof_moves - 1] = $2;
 
          $$ = moves;
        };
 
 half_move: T_INTEGER T_PERIOD ply
        {
-         in_move_text = true;
          $$ = create_move($3, "", "", "");
        } 
        |
        T_INTEGER T_PERIOD ply T_COMMENT
        {
-         in_move_text = true;
          $$ = create_move($3, $4, "", "");
        };      
 
 move: T_INTEGER T_PERIOD ply ply
        {
-         in_move_text = true;
          $$ = create_move($3, "", $4, "");
        }
        |
        T_INTEGER T_PERIOD ply T_COMMENT ply
        {
-         in_move_text = true;
          $$ = create_move($3, $4, $5, "");
        }
        |
        T_INTEGER T_PERIOD ply ply T_COMMENT
        {
-         in_move_text = true;
          $$ = create_move($3, "", $4, $5);
        }
        |
        T_INTEGER T_PERIOD ply T_COMMENT ply T_COMMENT
        {
-         in_move_text = true;
          $$ = create_move($3, $4, $5, $6);
-       };
+       } 
+       ;
 
 ply: T_KING_SIDE_CASTLE      | 
      T_QUEEN_SIDE_CASTLE     | 

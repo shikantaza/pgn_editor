@@ -55,6 +55,7 @@ enum bool changed = false;
 //end of global variables
 
 //extern variables
+extern enum bool in_move_text;
 extern FILE *yyin;
 
 extern char *substring(char *, int, int);
@@ -274,7 +275,7 @@ void update_fen(enum side s, char *move_str, char **fen_array)
   mate = (move_str[strlen(move_str)-1] == '#') ? true : false;
 
   if(check == true || mate == true)
-    strncpy(mv1, move_str, strlen(move_str)-2);
+    strncpy(mv1, move_str, strlen(move_str)-1);
   else
     strcpy(mv1, move_str);
 
@@ -408,6 +409,10 @@ void update_fen(enum side s, char *move_str, char **fen_array)
       move_internal((s == white) ? mv[0] : mv[0]+32, mv+2, fen_array, mv[1]);
     }
   }
+  else //disambiguated capture
+  {
+    move_internal((s == white) ? mv[0] : mv[0]+32, mv+3, fen_array, mv[1]);
+  }
 }
 
 void remove_all_children(GtkWidget *container)
@@ -503,6 +508,8 @@ void copy_fen(char **src, char **dest)
 
 void load_from_file(char *file_name)
 {
+  in_move_text = false;
+
   yyin = fopen(file_name, "r");
 
   assert(yyin);
@@ -510,6 +517,8 @@ void load_from_file(char *file_name)
   yyparse();
 
   fclose(yyin);
+
+  yyin = NULL;
 
   fens = (char ***)malloc((2*nof_moves + 1) * sizeof(char **));
 
