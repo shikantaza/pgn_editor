@@ -479,14 +479,17 @@ void quit_application()
 
     int i, j;
 
-    for(i=0;i<2*nof_moves+1;i++)
+    if(fens)
     {
-      for(j=0;j<8;j++)
-        free(fens[i][j]);
+      for(i=0;i<2*nof_moves+1;i++)
+      {
+	for(j=0;j<8;j++)
+	  if(fens[i][j])free(fens[i][j]);
 
-      free(fens[i]);
+	free(fens[i]);
+      }
+      free(fens);
     }
-    free(fens);
 
     gtk_main_quit();
     exit(0);
@@ -601,6 +604,9 @@ void load_pgn_file(GtkWidget *widget, gpointer data)
 
 void save()
 {
+  if(strlen(pgn_file_name) == 0)
+    return;
+
   FILE *out = fopen(pgn_file_name, "w");
 
   assert(out);
@@ -706,6 +712,9 @@ void highlight_ply(enum bool highlight, int move_no, int ply_no)
 
 void move_forward()
 {
+  if(strlen(pgn_file_name) == 0)
+    return;
+
   if(move_no == -1)
   {
     move_no = 0;
@@ -737,6 +746,9 @@ void move_forward()
 
 void move_backward()
 {
+  if(strlen(pgn_file_name) == 0)
+    return;
+
   if(move_no == 0 && ply_no == 0)
     return;
 
@@ -815,6 +827,9 @@ void cancel_comment(GtkWidget *widget, gpointer data)
 
 void annot()
 {
+  if(strlen(pgn_file_name) == 0)
+    return;
+
   gtk_text_buffer_set_text(gtk_text_view_get_buffer((GtkTextView *)annotation_text_view),
                            ply_no == 1 ? moves[move_no].white_comment : moves[move_no].black_comment, 
                            -1);
@@ -1323,6 +1338,8 @@ int main(int argc, char *argv[])
     for(i=0;i<8;i++)
       free(fen_array[i]);
     free(fen_array);
+
+    memset(pgn_file_name, '\0', 100);
   }
   else
   {
