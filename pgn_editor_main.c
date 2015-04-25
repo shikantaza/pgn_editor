@@ -61,11 +61,14 @@ extern FILE *yyin;
 extern char *substring(char *, int, int);
 //end of extern variables
 
+//forward declarations
 void convert_fen_string_to_fen_array(char *, char **);
 void fill_grid(GtkWidget *, char **);
 void populate_moves_text_view();
 void save();
 void unhighlight_all_moves();
+void set_comment_view_text(char *);
+//end of forward declarations
 
 inline int min(int a, int b) { return (a <= b) ? a : b; }
 inline int max(int a, int b) { return (a >= b) ? a : b; }
@@ -798,9 +801,7 @@ void accept_comment(GtkWidget *widget, gpointer data)
   else
     assert(false);
 
-  gtk_text_buffer_set_text(gtk_text_view_get_buffer((GtkTextView *)comment_text_view),
-                           txt, 
-                           -1);
+  set_comment_view_text(txt);
 
   changed = true;
 
@@ -819,6 +820,7 @@ void annot()
                            -1);
 
   gtk_widget_show_all((GtkWidget *)annotation_window);
+  gtk_widget_grab_focus(annotation_text_view);
 }
 
 void annotate(GtkWidget *widget, gpointer data)
@@ -998,17 +1000,11 @@ void fill_grid(GtkWidget *grid, char **fen_array)
   if(moves)
   {
     if(ply_no == 1 && strlen(moves[move_no].white_comment) > 0)
-      gtk_text_buffer_set_text(gtk_text_view_get_buffer((GtkTextView *)comment_text_view),
-                             moves[move_no].white_comment, 
-                             -1);
+      set_comment_view_text(moves[move_no].white_comment);
     else if(ply_no == 2 && strlen(moves[move_no].black_comment) > 0)
-      gtk_text_buffer_set_text(gtk_text_view_get_buffer((GtkTextView *)comment_text_view),
-                               moves[move_no].black_comment, 
-                               -1);
+      set_comment_view_text(moves[move_no].black_comment);
     else
-      gtk_text_buffer_set_text(gtk_text_view_get_buffer((GtkTextView *)comment_text_view),
-                               "", 
-                               -1);
+      set_comment_view_text("");
   }
 
   gtk_widget_show_all((GtkWidget *)window);
@@ -1288,6 +1284,14 @@ int main(int argc, char *argv[])
   gtk_text_view_set_editable((GtkTextView *)comment_text_view, FALSE);
   gtk_text_view_set_cursor_visible((GtkTextView *)comment_text_view, FALSE);
 
+  g_signal_connect (comment_text_view, "button_press_event", G_CALLBACK (annotate), NULL);
+
+  gtk_text_buffer_create_tag(gtk_text_view_get_buffer((GtkTextView *)comment_text_view),
+                             "red_fg",
+                             "foreground",
+                             "red",
+                             NULL);
+
   gtk_container_add (GTK_CONTAINER (scrolled_win2), comment_text_view);
 
   gtk_text_buffer_create_tag(gtk_text_view_get_buffer((GtkTextView *)moves_text_view),
@@ -1341,4 +1345,23 @@ int main(int argc, char *argv[])
   gtk_main ();
 
   return(0);
+}
+
+void set_comment_view_text(char *txt)
+{
+  GtkTextBuffer *buf = gtk_text_view_get_buffer((GtkTextView *)comment_text_view);
+
+  GtkTextIter start, end;
+
+  gtk_text_buffer_set_text(buf,
+                           txt, 
+                           -1);
+
+  gtk_text_buffer_get_start_iter(buf, &start);
+  gtk_text_buffer_get_end_iter(buf, &end);
+
+  gtk_text_buffer_apply_tag_by_name(buf,
+				    "red_fg",
+				    &start,
+				    &end);
 }
