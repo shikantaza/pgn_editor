@@ -59,6 +59,10 @@ extern enum bool in_move_text;
 extern FILE *yyin;
 
 extern char *substring(char *, int, int);
+
+extern void new_pgn_file(GtkWidget *, gpointer);
+extern void new_pgn();
+extern void board_clicked(GtkWidget *, GdkEventButton *, gpointer);
 //end of extern variables
 
 //forward declarations
@@ -101,6 +105,17 @@ int convert_char(char c)
     return 8 - (c - '0');
   else
     assert(false);
+}
+
+char *convert_fen_to_algebraic_coords(int r, int c)
+{
+  char *s = (char *)malloc(3*sizeof(char));
+  memset(s, '\0', 3);
+
+  s[0] = c + 97;
+  s[1] = 8 - r + '0';
+
+  return s;
 }
 
 int convert_algebraic_to_fen_coords(char s[2])
@@ -873,7 +888,9 @@ void move_to_end()
 
 gboolean handle_key_press_events(GtkWidget *widget, GdkEventKey *event, gpointer user_data)
 {
-  if(widget == (GtkWidget *)window && (event->state & GDK_CONTROL_MASK) && event->keyval == GDK_KEY_l)
+  if(widget == (GtkWidget *)window && (event->state & GDK_CONTROL_MASK) && event->keyval == GDK_KEY_n)
+    new_pgn();
+  else if(widget == (GtkWidget *)window && (event->state & GDK_CONTROL_MASK) && event->keyval == GDK_KEY_l)
     load();
   else if(widget == (GtkWidget *)window && (event->state & GDK_CONTROL_MASK) && event->keyval == GDK_KEY_s)
     save();
@@ -932,6 +949,7 @@ void fill_grid(GtkWidget *grid, char **fen_array)
 {
   int i, j;
 
+  GtkWidget *boxes[8][8];
   GtkWidget *images[8][8];
 
   remove_all_children(grid);
@@ -1008,7 +1026,13 @@ void fill_grid(GtkWidget *grid, char **fen_array)
           images[i][j] = gtk_image_new_from_file("icons/white_square.png");
       }
 
-      gtk_grid_attach (GTK_GRID (grid), images[i][j], j, i, 1, 1);
+      boxes[i][j] = gtk_event_box_new();
+      gtk_container_add(GTK_CONTAINER(boxes[i][j]), images[i][j]);
+
+      g_signal_connect(boxes[i][j], "button_press_event", G_CALLBACK(board_clicked), (gpointer)(i*8+j)); 
+
+      //gtk_grid_attach (GTK_GRID (grid), images[i][j], j, i, 1, 1);
+      gtk_grid_attach (GTK_GRID (grid), boxes[i][j], j, i, 1, 1);
     }
   }
 
@@ -1047,6 +1071,7 @@ GtkToolbar *create_toolbar()
 {
   GtkWidget *toolbar;
 
+  GtkWidget *new_icon = gtk_image_new_from_file ("icons/new32x32.png");
   GtkWidget *load_icon = gtk_image_new_from_file ("icons/load32x32.png");
   GtkWidget *save_icon = gtk_image_new_from_file ("icons/save32x32.png");
   GtkWidget *backward_icon = gtk_image_new_from_file ("icons/backward.png");
@@ -1060,30 +1085,35 @@ GtkToolbar *create_toolbar()
   gtk_toolbar_set_style (GTK_TOOLBAR (toolbar), GTK_TOOLBAR_ICONS);
   gtk_container_set_border_width (GTK_CONTAINER (toolbar), 5);
 
+  GtkToolItem *new_button = gtk_tool_button_new(new_icon, NULL);
+  gtk_tool_item_set_tooltip_text(new_button, "New PGN (Ctrl-N)");
+  g_signal_connect (new_button, "clicked", G_CALLBACK (new_pgn_file), NULL);
+  gtk_toolbar_insert((GtkToolbar *)toolbar, new_button, 0);
+
   GtkToolItem *load_button = gtk_tool_button_new(load_icon, NULL);
   gtk_tool_item_set_tooltip_text(load_button, "Load PGN (Ctrl-L)");
   g_signal_connect (load_button, "clicked", G_CALLBACK (load_pgn_file), NULL);
-  gtk_toolbar_insert((GtkToolbar *)toolbar, load_button, 0);
+  gtk_toolbar_insert((GtkToolbar *)toolbar, load_button, 1);
 
   GtkToolItem *save_button = gtk_tool_button_new(save_icon, NULL);
   gtk_tool_item_set_tooltip_text(save_button, "Save PGN (Ctrl-S)");
   g_signal_connect (save_button, "clicked", G_CALLBACK (save_pgn_file), NULL);
-  gtk_toolbar_insert((GtkToolbar *)toolbar, save_button, 1);
+  gtk_toolbar_insert((GtkToolbar *)toolbar, save_button, 2);
 
   GtkToolItem *backward_button = gtk_tool_button_new(backward_icon, NULL);
   gtk_tool_item_set_tooltip_text(backward_button, "Back (Left Arrow)");
   g_signal_connect (backward_button, "clicked", G_CALLBACK (backward), NULL);
-  gtk_toolbar_insert((GtkToolbar *)toolbar, backward_button, 2);
+  gtk_toolbar_insert((GtkToolbar *)toolbar, backward_button, 3);
 
   GtkToolItem *forward_button = gtk_tool_button_new(forward_icon, NULL);
   gtk_tool_item_set_tooltip_text(forward_button, "Forward (Right Arrow)");
   g_signal_connect (forward_button, "clicked", G_CALLBACK (forward), NULL);
-  gtk_toolbar_insert((GtkToolbar *)toolbar, forward_button, 3);
+  gtk_toolbar_insert((GtkToolbar *)toolbar, forward_button, 4);
 
   GtkToolItem *annotate_button = gtk_tool_button_new(annotate_icon, NULL);
   gtk_tool_item_set_tooltip_text(annotate_button, "Annotate (Ctrl-A)");
   g_signal_connect (annotate_button, "clicked", G_CALLBACK (annotate), NULL);
-  gtk_toolbar_insert((GtkToolbar *)toolbar, annotate_button, 4);
+  gtk_toolbar_insert((GtkToolbar *)toolbar, annotate_button, 5);
 
   /* GtkToolItem *clear_button = gtk_tool_button_new(clear_icon, NULL); */
   /* gtk_tool_item_set_tooltip_text(clear_button, "Clear board"); */
@@ -1093,7 +1123,7 @@ GtkToolbar *create_toolbar()
   GtkToolItem *exit_button = gtk_tool_button_new(exit_icon, NULL);
   gtk_tool_item_set_tooltip_text(exit_button, "Exit (Ctrl-Q)");
   g_signal_connect (exit_button, "clicked", G_CALLBACK (quit), NULL);
-  gtk_toolbar_insert((GtkToolbar *)toolbar, exit_button, 5);
+  gtk_toolbar_insert((GtkToolbar *)toolbar, exit_button, 6);
 
   return (GtkToolbar *)toolbar;
 }
