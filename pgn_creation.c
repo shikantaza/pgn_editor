@@ -32,9 +32,7 @@ enum bool pgn_creation_mode;
 int selected_r, selected_c;
 
 char ***new_pgn_fens;
-int new_pgn_move_no;
-int new_pgn_ply_no;
-int new_pgn_nof_moves;
+int nof_plys;
 
 move_t *new_pgn_moves;
 
@@ -44,6 +42,7 @@ enum bool white_can_castle, black_can_castle;
 //end of global variables
 
 //external variables
+extern GtkWidget *window;
 extern GtkWidget *grid;
 extern GtkWidget *moves_text_view;
 
@@ -62,6 +61,8 @@ enum bool is_white_piece(char);
 enum bool is_black_piece(char);
 char *convert_to_algebraic_notation(int, int, int, int, char **);
 void append_ply_to_moves_list();
+enum bool is_king_under_check(enum side, char **);
+void free_new_pgn_data_structures();
 //end of forward declarations
 
 char **create_new_fen()
@@ -82,6 +83,8 @@ char **create_new_fen()
 
 void new_pgn()
 {
+  free_new_pgn_data_structures();
+
   pgn_creation_mode = true;
 
   new_pgn_fens = (char ***)malloc(sizeof(char **));
@@ -93,9 +96,8 @@ void new_pgn()
   new_pgn_fens[0] = fen_array;
 
   state = white_to_move;
-  new_pgn_nof_moves = 0;
-  new_pgn_move_no = 0;
-  new_pgn_ply_no = 1;
+
+  nof_plys = 0;
 
   fill_grid(grid, fen_array);
 }
@@ -109,7 +111,7 @@ void board_clicked(GtkWidget *widget, GdkEventButton *event, gpointer data)
 {
   int d = (int)data;
 
-  int index = 2*new_pgn_move_no + new_pgn_ply_no;
+  int index = nof_plys + 1;
 
   if(state == white_to_move)
   {
@@ -209,18 +211,22 @@ void board_clicked(GtkWidget *widget, GdkEventButton *event, gpointer data)
       black_can_castle = false;
       strcpy(move_text, "O-O-O");
     }
+
+    enum bool promotion = false;
     
     if(new_pgn_fens[index-1][selected_r][selected_c] == 'P' &&
        d/8 == 0)
     {
       new_fen[selected_r][selected_c] = 0;
       new_fen[d/8][d%8] = 'Q'; //TODO: Ask user for choice of promotion piece
+      promotion = true;
     }
     else if(new_pgn_fens[index-1][selected_r][selected_c] == 'p' &&
        d/8 == 7)
     {
       new_fen[selected_r][selected_c] = 0;
       new_fen[d/8][d%8] = 'q'; //TODO: Ask user for choice of promotion piece
+      promotion = true;
     }
     else
     {
@@ -235,38 +241,46 @@ void board_clicked(GtkWidget *widget, GdkEventButton *event, gpointer data)
       free(temp);
     }
     
-    if(new_pgn_ply_no == 0 || new_pgn_ply_no == 1)
+    if(promotion == true)
+      strcat(move_text, "=Q");
+
+    if(is_white_piece(new_fen[d/8][d%8]) == true && is_king_under_check(black, new_fen) == true ||
+       is_black_piece(new_fen[d/8][d%8]) == true && is_king_under_check(white, new_fen) == true)
+      strcat(move_text, "+");
+
+    if(nof_plys % 2 == 0)
     {
-      new_pgn_ply_no = 2;
       state = black_to_move;
 
-      new_pgn_nof_moves++;
-      new_pgn_move_no++;
- 
       if(new_pgn_moves == NULL)
 	new_pgn_moves = (move_t *)malloc(sizeof(move_t));
       else
-	new_pgn_moves = (move_t *)realloc(new_pgn_moves, new_pgn_nof_moves * sizeof(move_t));
+	new_pgn_moves = (move_t *)realloc(new_pgn_moves, (nof_plys/2 + 1) * sizeof(move_t));
 
-      strcpy(new_pgn_moves[new_pgn_move_no-1].white_move, move_text);
+      memset(new_pgn_moves[nof_plys/2].white_move, '\0', 10);
+
+      strcpy(new_pgn_moves[nof_plys/2].white_move, move_text);
     }
-    else if(new_pgn_ply_no == 2)
+    else
     {
-      new_pgn_ply_no = 1;
       state = white_to_move;
 
-      strcpy(new_pgn_moves[new_pgn_move_no-1].black_move, move_text);
+      memset(new_pgn_moves[nof_plys/2].black_move, '\0', 10);
+
+      strcpy(new_pgn_moves[nof_plys/2].black_move, move_text);
     }
 
-    free(move_text);
+     free(move_text);
 
     append_ply_to_moves_list();
 
-    int new_size = 2*new_pgn_move_no+new_pgn_ply_no;
+    nof_plys++;
+
+    int new_size = nof_plys + 1;
 
     new_pgn_fens = (char ***)realloc(new_pgn_fens, new_size * sizeof(char **));
 
-    new_pgn_fens[2*new_pgn_move_no+new_pgn_ply_no - 1] = new_fen;
+    new_pgn_fens[new_size - 1] = new_fen;
 
     fill_grid(grid, new_fen);
   }
@@ -288,10 +302,20 @@ enum bool is_king_under_check(enum side s, char **fen_array)
 
   char piece = (s == white) ? 'K' : 'k';
 
+  enum bool king_square_found = false;
+
   for(i=0; i<8; i++)
+  {
+    if(king_square_found == true)
+      break;
+
     for(j=0; j<8; j++)
       if(fen_array[i][j] == piece) {
-	r = i; c = j; break; }
+	r = i; c = j; 
+	king_square_found = true;
+	break;
+      }
+  }
 
   if(piece == 'K')
     for(i=0; i<8;i++)
@@ -327,8 +351,9 @@ enum bool is_king_under_check(enum side s, char **fen_array)
 enum bool on_same_diagonal(int r1, int c1,
 			   int r2, int c2)
 {
-  if(abs(r1*8+c1 - (r2*8+c2)) % 7 == 0 ||
-     abs(r1*8+c1 - (r2*8+c2)) % 9 == 0)
+  /* if(abs(r1*8+c1 - (r2*8+c2)) % 7 == 0 || */
+  /*    abs(r1*8+c1 - (r2*8+c2)) % 9 == 0) */
+  if(abs(r1-r2) == abs(c1-c2))
     return true;
   else
     return false;
@@ -820,10 +845,50 @@ void append_ply_to_moves_list()
   char buf[20];
   memset(buf, '\0', 20);
 
-  if(new_pgn_ply_no == 2)
-    sprintf(buf, "%d. %s ", new_pgn_move_no, new_pgn_moves[new_pgn_move_no-1].white_move);
+  if(nof_plys % 2 == 0)
+    sprintf(buf, "%d. %s ", nof_plys/2 + 1, new_pgn_moves[nof_plys/2].white_move);
   else
-    sprintf(buf, "%s\n", new_pgn_moves[new_pgn_move_no-1].black_move);
+    sprintf(buf, "%s\n", new_pgn_moves[nof_plys/2].black_move);
 
   gtk_text_buffer_insert(tbuffer, &ei, buf, -1);
+}
+
+void move_forward_new_pgn()
+{
+  //TODO
+}
+
+void move_backward_new_pgn()
+{
+  //TODO
+}
+
+void free_new_pgn_data_structures()
+{
+  if(new_pgn_moves)
+  {
+    free(new_pgn_moves);
+    new_pgn_moves = NULL;
+  }
+
+  int i, j;
+  
+  if(new_pgn_fens)
+  {
+    for(i=0;i<nof_plys+1;i++)
+    {
+      for(j=0;j<8;j++)
+	if(new_pgn_fens[i][j])
+	{
+	  free(new_pgn_fens[i][j]);
+	  new_pgn_fens[i][j] = NULL;
+	}
+
+      free(new_pgn_fens[i]);
+      new_pgn_fens[i] = NULL;
+    }
+
+    free(new_pgn_fens);
+    new_pgn_fens = NULL;
+  }  
 }

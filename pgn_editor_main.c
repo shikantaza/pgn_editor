@@ -63,6 +63,11 @@ extern char *substring(char *, int, int);
 extern void new_pgn_file(GtkWidget *, gpointer);
 extern void new_pgn();
 extern void board_clicked(GtkWidget *, GdkEventButton *, gpointer);
+
+extern enum bool pgn_creation_mode;
+
+extern void move_forward_new_pgn();
+extern void move_backward_new_pgn();
 //end of extern variables
 
 //forward declarations
@@ -506,6 +511,8 @@ void quit_application()
       free(fens);
     }
 
+    free_new_pgn_data_structures();
+
     gtk_main_quit();
     exit(0);
   }
@@ -529,6 +536,8 @@ void copy_fen(char **src, char **dest)
 
 void load_from_file(char *file_name)
 {
+  free_new_pgn_data_structures();
+
   in_move_text = false;
 
   yyin = fopen(file_name, "r");
@@ -570,6 +579,8 @@ void load_from_file(char *file_name)
 
   move_no = 0;
   ply_no = 0;
+
+  pgn_creation_mode = false;
 }
 
 void load()
@@ -671,7 +682,6 @@ void highlight_ply(enum bool highlight, int move_no, int ply_no)
   gtk_text_buffer_get_iter_at_line(gtk_text_view_get_buffer((GtkTextView *)moves_text_view),
                                    &line_end_iter,
                                    move_no+1);
-  
 
   //find the first space ("1. e4")
   gtk_text_iter_forward_search(&line_start_iter,
@@ -727,6 +737,12 @@ void highlight_ply(enum bool highlight, int move_no, int ply_no)
 
 void move_forward()
 {
+  if(pgn_creation_mode == true)
+  {
+    move_forward_new_pgn();
+    return;
+  }
+
   if(strlen(pgn_file_name) == 0)
     return;
 
@@ -761,6 +777,12 @@ void move_forward()
 
 void move_backward()
 {
+  if(pgn_creation_mode == true)
+  {
+    move_backward_new_pgn();
+    return;
+  }
+
   if(strlen(pgn_file_name) == 0)
     return;
 
