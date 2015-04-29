@@ -33,6 +33,7 @@ int selected_r, selected_c;
 
 char ***new_pgn_fens;
 int nof_plys;
+int current_ply;
 
 move_t *new_pgn_moves;
 
@@ -63,6 +64,8 @@ char *convert_to_algebraic_notation(int, int, int, int, char **);
 void append_ply_to_moves_list();
 enum bool is_king_under_check(enum side, char **);
 void free_new_pgn_data_structures();
+void highlight_ply_new_pgn(enum bool, int);
+void unhighlight_all_moves_new_pgn();
 //end of forward declarations
 
 char **create_new_fen()
@@ -98,6 +101,7 @@ void new_pgn()
   state = white_to_move;
 
   nof_plys = 0;
+  current_ply = 0;
 
   fill_grid(grid, fen_array);
 }
@@ -275,6 +279,10 @@ void board_clicked(GtkWidget *widget, GdkEventButton *event, gpointer data)
     append_ply_to_moves_list();
 
     nof_plys++;
+    current_ply++;
+
+    unhighlight_all_moves_new_pgn();
+    highlight_ply_new_pgn(true, nof_plys);
 
     int new_size = nof_plys + 1;
 
@@ -855,12 +863,25 @@ void append_ply_to_moves_list()
 
 void move_forward_new_pgn()
 {
-  //TODO
+  if(current_ply == nof_plys)
+    return;
+
+  unhighlight_all_moves_new_pgn();
+  current_ply++;
+  highlight_ply_new_pgn(true, current_ply);
+  fill_grid(grid, new_pgn_fens[current_ply]);
 }
 
 void move_backward_new_pgn()
 {
-  //TODO
+  if(current_ply == 0)
+    return;
+
+  unhighlight_all_moves_new_pgn();
+  current_ply--;
+  if(current_ply>0)
+    highlight_ply_new_pgn(true, current_ply);
+  fill_grid(grid, new_pgn_fens[current_ply]);
 }
 
 void free_new_pgn_data_structures()
@@ -891,4 +912,92 @@ void free_new_pgn_data_structures()
     free(new_pgn_fens);
     new_pgn_fens = NULL;
   }  
+}
+
+void highlight_ply_new_pgn(enum bool highlight, int ply_no)
+{
+  //assert(ply_no > 0 && ply_no <= nof_plys);
+
+  int move_no = (ply_no % 2 == 1) ? ply_no / 2 : (ply_no - 2) / 2;
+
+  GtkTextIter line_start_iter, line_end_iter;
+  GtkTextIter match_start1, match_start2, match_start3, match_end1, match_end2, match_end3;
+
+  gtk_text_buffer_get_iter_at_line(gtk_text_view_get_buffer((GtkTextView *)moves_text_view),
+                                   &line_start_iter,
+                                   move_no);
+
+  gtk_text_buffer_get_iter_at_line(gtk_text_view_get_buffer((GtkTextView *)moves_text_view),
+                                   &line_end_iter,
+                                   move_no+1);
+
+  //find the first space ("1. e4")
+  gtk_text_iter_forward_search(&line_start_iter,
+                               " ",
+                               GTK_TEXT_SEARCH_TEXT_ONLY | GTK_TEXT_SEARCH_VISIBLE_ONLY,
+                               &match_start1,
+                               &match_end1,
+                               NULL);
+
+  //find the second space ("1. e4 c5")
+  gtk_text_iter_forward_search(&match_end1,
+                                " ",
+                                GTK_TEXT_SEARCH_TEXT_ONLY | GTK_TEXT_SEARCH_VISIBLE_ONLY,
+                                &match_start2,
+                                &match_end2,
+                                NULL);
+
+  if(ply_no % 2 == 0)
+    //find the newline ("1. e4 c5\n")
+    gtk_text_iter_forward_search(&match_end1,
+				 "\n",
+				 GTK_TEXT_SEARCH_TEXT_ONLY | GTK_TEXT_SEARCH_VISIBLE_ONLY,
+				 &match_start3,
+				 &match_end3,
+				 NULL);
+
+  if(highlight == true)
+  {
+    if(ply_no % 2 == 1)
+      gtk_text_buffer_apply_tag_by_name(gtk_text_view_get_buffer((GtkTextView *)moves_text_view),
+                                        "cyan_bg",
+                                        &match_end1,
+                                        &match_start2);
+    else if(ply_no % 2 == 0)
+    {
+      gtk_text_buffer_apply_tag_by_name(gtk_text_view_get_buffer((GtkTextView *)moves_text_view),
+                                        "cyan_bg",
+                                        &match_end2,
+                                        &match_start3);    
+    }
+    else
+      assert(false);
+  }
+  else
+  {
+    if(ply_no % 2 == 1)
+      gtk_text_buffer_remove_tag_by_name(gtk_text_view_get_buffer((GtkTextView *)moves_text_view),
+                                         "cyan_bg",
+                                         &match_end1,
+                                         &match_start2);
+    else if(ply_no %2 == 0)
+    {
+      gtk_text_buffer_remove_tag_by_name(gtk_text_view_get_buffer((GtkTextView *)moves_text_view),
+                                         "cyan_bg",
+                                         &match_end2,
+                                         &match_start3);    
+    }
+    else
+      assert(false);
+  }  
+}
+
+void unhighlight_all_moves_new_pgn()
+{
+  int i;
+  for(i=1;i<=nof_plys; i++)
+  {
+    highlight_ply_new_pgn(false, i);
+    highlight_ply_new_pgn(false, i);
+  }
 }
