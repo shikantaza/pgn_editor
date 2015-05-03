@@ -46,8 +46,30 @@ enum bool white_can_castle, black_can_castle;
 extern GtkWidget *window;
 extern GtkWidget *grid;
 extern GtkWidget *moves_text_view;
+extern GtkWidget *annotation_text_view;
+extern GtkWidget *annotation_window;
+extern GtkWidget *comment_text_view;
+
+extern GtkWidget *prom_win_white;
+extern GtkWidget *prom_win_black;
 
 extern char *convert_fen_to_algebraic_coords(int, int);
+
+extern char event[100];
+extern char site[100];
+extern char date[100];
+extern char round1[100]; //so named to avoid conflict with built in round() function
+extern char white_player[100];
+extern char black_player[100];
+extern char result[100];
+
+extern enum side promotion_side;
+extern int promotion_index;
+extern int promotion_d;
+extern char *promotion_move_text;
+extern char **promotion_new_fen;
+extern char promotion_choice;
+
 //end of external variables;
 
 //forward declarations
@@ -67,6 +89,30 @@ void free_new_pgn_data_structures();
 void highlight_ply_new_pgn(enum bool, int);
 void unhighlight_all_moves_new_pgn();
 //end of forward declarations
+
+void initialize_non_move_data()
+{
+  memset(event, '\0', 100);
+  strcpy(event, "?");
+
+  memset(site, '\0', 100);
+  strcpy(site, "?");
+
+  memset(date, '\0', 100);
+  strcpy(date, "?");
+
+  memset(round1, '\0', 100);
+  strcpy(round1, "?");
+
+  memset(white_player, '\0', 100);
+  strcpy(white_player, "?");
+
+  memset(black_player, '\0', 100);
+  strcpy(black_player, "?");
+
+  memset(result, '\0', 100);
+  strcpy(result, "*");
+}
 
 char **create_new_fen()
 {
@@ -104,6 +150,11 @@ void new_pgn()
   current_ply = 0;
 
   fill_grid(grid, fen_array);
+
+  initialize_non_move_data();
+
+  gtk_text_buffer_set_text(gtk_text_view_get_buffer((GtkTextView *)comment_text_view), "", -1);
+  gtk_text_buffer_set_text(gtk_text_view_get_buffer((GtkTextView *)moves_text_view), "", -1);
 }
 
 void new_pgn_file(GtkWidget *widget, gpointer data)
@@ -113,6 +164,12 @@ void new_pgn_file(GtkWidget *widget, gpointer data)
 
 void board_clicked(GtkWidget *widget, GdkEventButton *event, gpointer data)
 {
+  //don't process mouse clicks on the
+  //board unless we're at the most
+  //recent move
+  if(current_ply != nof_plys)
+    return;
+
   int d = (int)data;
 
   int index = nof_plys + 1;
@@ -221,16 +278,37 @@ void board_clicked(GtkWidget *widget, GdkEventButton *event, gpointer data)
     if(new_pgn_fens[index-1][selected_r][selected_c] == 'P' &&
        d/8 == 0)
     {
-      new_fen[selected_r][selected_c] = 0;
-      new_fen[d/8][d%8] = 'Q'; //TODO: Ask user for choice of promotion piece
-      promotion = true;
+      //new_fen[selected_r][selected_c] = 0;
+      //new_fen[d/8][d%8] = 'Q'; //TODO: Ask user for choice of promotion piece
+      //promotion = true;
+
+      promotion_side       = white;
+      promotion_index      = index;;
+      promotion_d          = d;
+      promotion_move_text  = move_text;
+      promotion_new_fen    = new_fen;
+
+      gtk_widget_show_all((GtkWidget *)prom_win_white);
+
+      return;
+
     }
     else if(new_pgn_fens[index-1][selected_r][selected_c] == 'p' &&
        d/8 == 7)
     {
-      new_fen[selected_r][selected_c] = 0;
-      new_fen[d/8][d%8] = 'q'; //TODO: Ask user for choice of promotion piece
-      promotion = true;
+      //new_fen[selected_r][selected_c] = 0;
+      //new_fen[d/8][d%8] = 'q'; //TODO: Ask user for choice of promotion piece
+      //promotion = true;
+
+      promotion_side       = black;
+      promotion_index      = index;;
+      promotion_d          = d;
+      promotion_move_text  = move_text;
+      promotion_new_fen    = new_fen;
+
+      gtk_widget_show_all((GtkWidget *)prom_win_black);
+
+      return;
     }
     else
     {
@@ -262,8 +340,10 @@ void board_clicked(GtkWidget *widget, GdkEventButton *event, gpointer data)
 	new_pgn_moves = (move_t *)realloc(new_pgn_moves, (nof_plys/2 + 1) * sizeof(move_t));
 
       memset(new_pgn_moves[nof_plys/2].white_move, '\0', 10);
-
       strcpy(new_pgn_moves[nof_plys/2].white_move, move_text);
+
+      memset(new_pgn_moves[nof_plys/2].white_comment, '\0', 200);
+      memset(new_pgn_moves[nof_plys/2].black_comment, '\0', 200);
     }
     else
     {
@@ -274,7 +354,7 @@ void board_clicked(GtkWidget *widget, GdkEventButton *event, gpointer data)
       strcpy(new_pgn_moves[nof_plys/2].black_move, move_text);
     }
 
-     free(move_text);
+    free(move_text);
 
     append_ply_to_moves_list();
 
@@ -1000,4 +1080,158 @@ void unhighlight_all_moves_new_pgn()
     highlight_ply_new_pgn(false, i);
     highlight_ply_new_pgn(false, i);
   }
+}
+
+void display_comment_new_pgn()
+{
+  if(current_ply == 0)
+    return;
+
+  if(new_pgn_moves)
+  {
+    int move_no = (current_ply % 2 == 1) ? current_ply / 2 : (current_ply - 2) / 2;
+
+    if(current_ply % 2 == 1 && strlen(new_pgn_moves[move_no].white_comment) > 0)
+      set_comment_view_text(new_pgn_moves[move_no].white_comment);
+    else if(current_ply % 2 == 0 && strlen(new_pgn_moves[move_no].black_comment) > 0)
+      set_comment_view_text(new_pgn_moves[move_no].black_comment);
+    else
+      set_comment_view_text("");
+  }
+}
+
+void annot_new_pgn()
+{
+  if(current_ply == 0)
+    return;
+
+  int move_no = (current_ply % 2 == 1) ? current_ply / 2 : (current_ply - 2) / 2;
+
+  gtk_text_buffer_set_text(gtk_text_view_get_buffer((GtkTextView *)annotation_text_view),
+                           current_ply % 2 == 1 ? new_pgn_moves[move_no].white_comment : new_pgn_moves[move_no].black_comment, 
+                           -1);
+
+  gtk_widget_show_all((GtkWidget *)annotation_window);
+  gtk_widget_grab_focus(annotation_text_view);
+}
+
+void accept_comment_new_pgn(GtkWidget *widget, gpointer data)
+{
+  if(current_ply == 0)
+    return;
+
+  GtkTextIter start, end;
+  GtkTextBuffer *buf = gtk_text_view_get_buffer((GtkTextView *)annotation_text_view);
+
+  gtk_text_buffer_get_start_iter(buf, &start);
+  gtk_text_buffer_get_end_iter(buf, &end);
+
+  gchar *txt = gtk_text_buffer_get_text(buf, &start, &end, FALSE);
+
+  int move_no = (current_ply % 2 == 1) ? current_ply / 2 : (current_ply - 2) / 2;
+
+  if(current_ply % 2 == 1)
+  {
+    memset(new_pgn_moves[move_no].white_comment, '\0', 200);
+    strcpy(new_pgn_moves[move_no].white_comment, txt);
+  }
+  else if(current_ply % 2 == 0)
+  {
+    memset(new_pgn_moves[move_no].black_comment, '\0', 200);
+    strcpy(new_pgn_moves[move_no].black_comment, txt);
+  }
+  else
+    assert(false);
+
+  set_comment_view_text(txt);
+
+  gtk_widget_hide((GtkWidget *)annotation_window);
+}
+
+void process_promotion()
+{
+  promotion_new_fen[selected_r][selected_c] = 0;
+  promotion_new_fen[promotion_d/8][promotion_d%8] = promotion_choice;
+
+  if(strlen(promotion_move_text) == 0)
+  {
+    char *temp = convert_to_algebraic_notation(selected_r, selected_c, promotion_d/8, promotion_d%8, new_pgn_fens[promotion_index-1]);
+    strcpy(promotion_move_text, temp);
+    free(temp);
+  }
+  
+  if(promotion_side == white)
+  {
+    if(promotion_choice == 'Q')
+      strcat(promotion_move_text, "=Q");
+    else if(promotion_choice == 'R')
+      strcat(promotion_move_text, "=R");
+    else if(promotion_choice == 'B')
+      strcat(promotion_move_text, "=B");
+    else if(promotion_choice == 'N')
+      strcat(promotion_move_text, "=N");
+    else
+      assert(false);
+  }
+  else if(promotion_side == black)
+  {
+    if(promotion_choice == 'q')
+      strcat(promotion_move_text, "=Q");
+    else if(promotion_choice == 'r')
+      strcat(promotion_move_text, "=R");
+    else if(promotion_choice == 'b')
+      strcat(promotion_move_text, "=B");
+    else if(promotion_choice == 'n')
+      strcat(promotion_move_text, "=N");
+    else
+      assert(false);
+  }
+  else
+    assert(false);
+
+  if(is_white_piece(promotion_new_fen[promotion_d/8][promotion_d%8]) == true && is_king_under_check(black, promotion_new_fen) == true ||
+     is_black_piece(promotion_new_fen[promotion_d/8][promotion_d%8]) == true && is_king_under_check(white, promotion_new_fen) == true)
+    strcat(promotion_move_text, "+");
+
+  if(nof_plys % 2 == 0)
+  {
+    state = black_to_move;
+
+    if(new_pgn_moves == NULL)
+      new_pgn_moves = (move_t *)malloc(sizeof(move_t));
+    else
+      new_pgn_moves = (move_t *)realloc(new_pgn_moves, (nof_plys/2 + 1) * sizeof(move_t));
+
+    memset(new_pgn_moves[nof_plys/2].white_move, '\0', 10);
+    strcpy(new_pgn_moves[nof_plys/2].white_move, promotion_move_text);
+
+    memset(new_pgn_moves[nof_plys/2].white_comment, '\0', 200);
+    memset(new_pgn_moves[nof_plys/2].black_comment, '\0', 200);
+  }
+  else
+  {
+    state = white_to_move;
+
+    memset(new_pgn_moves[nof_plys/2].black_move, '\0', 10);
+
+    strcpy(new_pgn_moves[nof_plys/2].black_move, promotion_move_text);
+  }
+
+  free(promotion_move_text);
+
+  append_ply_to_moves_list();
+
+  nof_plys++;
+  current_ply++;
+
+  unhighlight_all_moves_new_pgn();
+  highlight_ply_new_pgn(true, nof_plys);
+
+  int new_size = nof_plys + 1;
+
+  new_pgn_fens = (char ***)realloc(new_pgn_fens, new_size * sizeof(char **));
+
+  new_pgn_fens[new_size - 1] = promotion_new_fen;
+
+  fill_grid(grid, promotion_new_fen);
 }

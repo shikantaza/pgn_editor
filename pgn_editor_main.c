@@ -33,6 +33,21 @@ GtkWidget *moves_text_view;
 GtkWidget *comment_text_view;
 GtkWidget *annotation_text_view;
 
+GtkWidget *non_move_data_window;
+
+GtkWidget *prom_win_white;
+GtkWidget *prom_win_black;
+
+GtkWidget *event_text;
+GtkWidget *site_text;
+GtkWidget *date_text;
+GtkWidget *round_text;
+GtkWidget *white_text;
+GtkWidget *black_text;
+GtkWidget *result_text;
+
+GtkWidget *views[7];
+
 char event[100];
 char site[100];
 char date[100];
@@ -52,6 +67,18 @@ char pgn_file_name[100];
 
 enum bool changed = false;
 
+char prom_white_choice;
+char prom_black_choice;
+
+//promotion logic variables
+enum side promotion_side;
+int promotion_index;
+int promotion_d;
+int promotion_move_text;
+char **promotion_new_fen;
+char promotion_choice;
+//end of promotion logic variables
+
 //end of global variables
 
 //extern variables
@@ -68,6 +95,15 @@ extern enum bool pgn_creation_mode;
 
 extern void move_forward_new_pgn();
 extern void move_backward_new_pgn();
+
+extern void highlight_ply_new_pgn(enum bool, int);
+
+char ***new_pgn_fens;
+extern int current_ply;
+extern int nof_plys;
+extern move_t *new_pgn_moves;
+
+void process_promotion();
 //end of extern variables
 
 //forward declarations
@@ -77,11 +113,24 @@ void populate_moves_text_view();
 void save();
 void unhighlight_all_moves();
 void set_comment_view_text(char *);
+void populate_non_move_data();
+void create_promotion_piece_choice_window_for_white();
 //end of forward declarations
 
 inline int min(int a, int b) { return (a <= b) ? a : b; }
 inline int max(int a, int b) { return (a >= b) ? a : b; }
 inline abs(int a) { return (a >= 0) ? a : (-1)*a; }
+
+gchar *get_text_from_text_view(GtkTextView *view)
+{
+  GtkTextIter start, end;
+  GtkTextBuffer *buf = gtk_text_view_get_buffer((GtkTextView *)view);
+
+  gtk_text_buffer_get_start_iter(buf, &start);
+  gtk_text_buffer_get_end_iter(buf, &end);
+
+  return gtk_text_buffer_get_text(buf, &start, &end, FALSE);
+}
 
 int find_square(char piece, char **fen_array, int start_square)
 {
@@ -302,12 +351,12 @@ void update_fen(enum side s, char *move_str, char **fen_array)
   else
     strcpy(mv1, move_str);
 
-  promotion = mv1[strlen(mv)-2] == '=' ? true : false;
+  promotion = mv1[strlen(mv1)-2] == '=' ? true : false;
 
   if(promotion == true)
   {
-    promotion_piece = mv[strlen(mv)-1];
-    strncpy(mv, mv1, strlen(mv)-3); 
+    promotion_piece = mv1[strlen(mv1)-1];
+    strncpy(mv, mv1, strlen(mv1)-2); 
   }
   else
     strcpy(mv, mv1);
@@ -575,6 +624,8 @@ void load_from_file(char *file_name)
 
   populate_moves_text_view();
 
+  populate_non_move_data();
+
   gtk_widget_show_all((GtkWidget *)window);
 
   move_no = 0;
@@ -630,8 +681,27 @@ void load_pgn_file(GtkWidget *widget, gpointer data)
 
 void save()
 {
-  if(strlen(pgn_file_name) == 0)
+  if(pgn_creation_mode == false && strlen(pgn_file_name) == 0)
     return;
+
+  if(pgn_creation_mode == true)
+  {
+    GtkWidget *dialog;
+
+    dialog = gtk_file_chooser_dialog_new ("Save PGN File",
+                                          (GtkWindow *)window,
+                                          GTK_FILE_CHOOSER_ACTION_SAVE,
+                                          "Cancel", GTK_RESPONSE_CANCEL,
+                                          "Open", GTK_RESPONSE_ACCEPT,
+                                          NULL);
+
+    if (gtk_dialog_run (GTK_DIALOG (dialog)) == GTK_RESPONSE_ACCEPT)
+    {
+      strcpy(pgn_file_name, gtk_file_chooser_get_filename (GTK_FILE_CHOOSER (dialog)));
+    }
+
+    gtk_widget_destroy (dialog);
+  }
 
   FILE *out = fopen(pgn_file_name, "w");
 
@@ -647,14 +717,23 @@ void save()
 
   int i;
 
-  for(i=0; i<nof_moves; i++)
+  move_t *moves_to_be_used = (pgn_creation_mode == true) ? new_pgn_moves : moves;
+
+  int move_count;
+
+  if(pgn_creation_mode == true)
+    move_count = (nof_plys % 2 == 1) ? (nof_plys / 2) + 1 : (nof_plys / 2);
+  else
+    move_count = nof_moves; 
+
+  for(i=0; i<move_count; i++)
   {
-    fprintf(out, "%d. %s ", i+1, moves[i].white_move);
-    if(strlen(moves[i].white_comment) > 0)
-      fprintf(out, "{%s} ", moves[i].white_comment);
-    fprintf(out, "%s ", moves[i].black_move);
-    if(strlen(moves[i].black_comment) > 0)
-      fprintf(out, "{%s} ", moves[i].black_comment);
+    fprintf(out, "%d. %s ", i+1, moves_to_be_used[i].white_move);
+    if(strlen(moves_to_be_used[i].white_comment) > 0)
+      fprintf(out, "{%s} ", moves_to_be_used[i].white_comment);
+    fprintf(out, "%s ", moves_to_be_used[i].black_move);
+    if(strlen(moves_to_be_used[i].black_comment) > 0)
+      fprintf(out, "{%s} ", moves_to_be_used[i].black_comment);
   }
 
   fprintf(out, "%s ", result);
@@ -827,8 +906,57 @@ void backward(GtkWidget *widget, gpointer data)
   move_backward();
 }
 
+void accept_edit_non_move_data()
+{
+  gchar *str;
+
+  str = get_text_from_text_view((GtkTextView *)views[0]);
+  strcpy(event, strlen(str) == 0 ? "?" : str);
+
+  str = get_text_from_text_view((GtkTextView *)views[1]);
+  strcpy(site, strlen(str) == 0 ? "?" : str);
+
+  str = get_text_from_text_view((GtkTextView *)views[2]);
+  strcpy(date, strlen(str) == 0 ? "?" : str);
+
+  str = get_text_from_text_view((GtkTextView *)views[3]);
+  strcpy(round1, strlen(str) == 0 ? "?" : str);        
+
+  str = get_text_from_text_view((GtkTextView *)views[4]);
+  strcpy(white_player, strlen(str) == 0 ? "?" : str);
+
+  str = get_text_from_text_view((GtkTextView *)views[5]);
+  strcpy(black_player, strlen(str) == 0 ? "?" : str);
+
+  str = get_text_from_text_view((GtkTextView *)views[6]);
+  strcpy(result, strlen(str) == 0 ? "?" : str);
+
+  gtk_widget_hide((GtkWidget *)non_move_data_window);
+}
+
+void cancel_edit_non_move_data()
+{
+  gtk_widget_hide((GtkWidget *)non_move_data_window);
+}
+
+void accept_edit_non_move_data_clicked(GtkWidget *widget, gpointer data)
+{
+  accept_edit_non_move_data();
+}
+
+void cancel_edit_non_move_data_clicked(GtkWidget *widget, gpointer data)
+{
+  cancel_edit_non_move_data();
+}
+
 void accept_comment(GtkWidget *widget, gpointer data)
 {
+  if(pgn_creation_mode == true)
+  {
+    accept_comment_new_pgn(widget, data);
+    return;
+  }
+
   GtkTextIter start, end;
   GtkTextBuffer *buf = gtk_text_view_get_buffer((GtkTextView *)annotation_text_view);
 
@@ -864,6 +992,12 @@ void cancel_comment(GtkWidget *widget, gpointer data)
 
 void annot()
 {
+  if(pgn_creation_mode == true)
+  {
+    annot_new_pgn();
+    return;
+  }
+
   if(strlen(pgn_file_name) == 0)
     return;
 
@@ -873,6 +1007,12 @@ void annot()
 
   gtk_widget_show_all((GtkWidget *)annotation_window);
   gtk_widget_grab_focus(annotation_text_view);
+}
+
+void edit_non_move_data_clicked(GtkWidget *widget, gpointer data)
+{
+  populate_non_move_data();
+  gtk_widget_show_all((GtkWidget *)non_move_data_window);
 }
 
 void annotate(GtkWidget *widget, gpointer data)
@@ -887,6 +1027,14 @@ void clear_board(GtkWidget *widget, gpointer data)
 
 void move_to_start_pos()
 {
+  if(pgn_creation_mode == true)
+  {
+    unhighlight_all_moves_new_pgn();
+    current_ply = 0;
+    fill_grid(grid, new_pgn_fens[0]);
+    return;
+  }
+
   unhighlight_all_moves();
   move_no = 0;
   ply_no = 0;
@@ -895,6 +1043,15 @@ void move_to_start_pos()
 
 void move_to_end()
 {
+  if(pgn_creation_mode == true)
+  {
+    current_ply = nof_plys;
+    unhighlight_all_moves_new_pgn();
+    highlight_ply_new_pgn(true, current_ply);
+    fill_grid(grid, new_pgn_fens[current_ply]);
+    return;
+  }
+
   move_no = nof_moves-1;
 
   if(strlen(moves[move_no].black_move) > 0)
@@ -1058,6 +1215,13 @@ void fill_grid(GtkWidget *grid, char **fen_array)
     }
   }
 
+  if(pgn_creation_mode == true)
+  {
+    display_comment_new_pgn();
+    gtk_widget_show_all((GtkWidget *)window);
+    return;
+  }
+
   if(moves)
   {
     if(ply_no == 1 && strlen(moves[move_no].white_comment) > 0)
@@ -1098,6 +1262,7 @@ GtkToolbar *create_toolbar()
   GtkWidget *save_icon = gtk_image_new_from_file ("icons/save32x32.png");
   GtkWidget *backward_icon = gtk_image_new_from_file ("icons/backward.png");
   GtkWidget *forward_icon = gtk_image_new_from_file ("icons/forward.png");
+  GtkWidget *edit_icon = gtk_image_new_from_file ("icons/edit.png");
   GtkWidget *annotate_icon = gtk_image_new_from_file ("icons/annotate.png");
   GtkWidget *clear_icon = gtk_image_new_from_file ("icons/clear.png");
   GtkWidget *exit_icon = gtk_image_new_from_file ("icons/exit.png");
@@ -1132,10 +1297,15 @@ GtkToolbar *create_toolbar()
   g_signal_connect (forward_button, "clicked", G_CALLBACK (forward), NULL);
   gtk_toolbar_insert((GtkToolbar *)toolbar, forward_button, 4);
 
+  GtkToolItem *edit_button = gtk_tool_button_new(edit_icon, NULL);
+  gtk_tool_item_set_tooltip_text(edit_button, "Edit Other Data (Ctrl-E)");
+  g_signal_connect (edit_button, "clicked", G_CALLBACK (edit_non_move_data_clicked), NULL);
+  gtk_toolbar_insert((GtkToolbar *)toolbar, edit_button, 5);
+
   GtkToolItem *annotate_button = gtk_tool_button_new(annotate_icon, NULL);
   gtk_tool_item_set_tooltip_text(annotate_button, "Annotate (Ctrl-A)");
   g_signal_connect (annotate_button, "clicked", G_CALLBACK (annotate), NULL);
-  gtk_toolbar_insert((GtkToolbar *)toolbar, annotate_button, 5);
+  gtk_toolbar_insert((GtkToolbar *)toolbar, annotate_button, 6);
 
   /* GtkToolItem *clear_button = gtk_tool_button_new(clear_icon, NULL); */
   /* gtk_tool_item_set_tooltip_text(clear_button, "Clear board"); */
@@ -1145,7 +1315,7 @@ GtkToolbar *create_toolbar()
   GtkToolItem *exit_button = gtk_tool_button_new(exit_icon, NULL);
   gtk_tool_item_set_tooltip_text(exit_button, "Exit (Ctrl-Q)");
   g_signal_connect (exit_button, "clicked", G_CALLBACK (quit), NULL);
-  gtk_toolbar_insert((GtkToolbar *)toolbar, exit_button, 6);
+  gtk_toolbar_insert((GtkToolbar *)toolbar, exit_button, 7);
 
   return (GtkToolbar *)toolbar;
 }
@@ -1300,6 +1470,21 @@ void select_move(GtkTextView *view, GdkEventButton *event, gpointer data)
     //printf("%s\n", str);
   }
 
+  if(pgn_creation_mode == true)
+  {
+    unhighlight_all_moves_new_pgn();
+
+    int move_no = gtk_text_iter_get_line(&iter);
+    int ply_no = (white_move == true) ? 2*move_no+1 : 2*move_no+2;
+
+    fill_grid(grid, new_pgn_fens[ply_no]);
+    highlight_ply_new_pgn(true, ply_no);
+
+    current_ply = ply_no;
+
+    return;
+  }
+
   unhighlight_all_moves();
 
   move_no = gtk_text_iter_get_line(&iter);
@@ -1411,7 +1596,12 @@ int main(int argc, char *argv[])
 
   create_annotation_window();
 
-  gtk_main ();
+  create_non_move_data_capture_window();
+
+  create_promotion_piece_choice_window_for_white();
+  create_promotion_piece_choice_window_for_black();
+
+  gtk_main();
 
   return(0);
 }
@@ -1433,4 +1623,228 @@ void set_comment_view_text(char *txt)
 				    "red_fg",
 				    &start,
 				    &end);
+}
+
+
+void populate_non_move_data()
+{
+  gtk_text_buffer_set_text(gtk_text_view_get_buffer((GtkTextView *)event_text), strlen(event) == 0 ? "?" : event, -1);  
+  gtk_text_buffer_set_text(gtk_text_view_get_buffer((GtkTextView *)site_text), strlen(site) == 0 ? "?" : site, -1);
+  gtk_text_buffer_set_text(gtk_text_view_get_buffer((GtkTextView *)date_text), strlen(date) == 0 ? "?" : date, -1);
+  gtk_text_buffer_set_text(gtk_text_view_get_buffer((GtkTextView *)round_text), strlen(round1) == 0 ? "?" : round1, -1);
+  gtk_text_buffer_set_text(gtk_text_view_get_buffer((GtkTextView *)white_text), strlen(white_player) == 0 ? "?" : white_player, -1);
+  gtk_text_buffer_set_text(gtk_text_view_get_buffer((GtkTextView *)black_text), strlen(black_player) == 0 ? "?" : black_player, -1);
+  gtk_text_buffer_set_text(gtk_text_view_get_buffer((GtkTextView *)result_text), strlen(result) == 0 ? "?" : result, -1);
+}
+
+create_non_move_data_capture_window()
+{
+  GtkWidget *win = gtk_window_new(GTK_WINDOW_TOPLEVEL);
+  gtk_window_set_default_size (GTK_WINDOW(win),
+                               380, 180);
+
+  gtk_window_set_transient_for((GtkWindow *)win, (GtkWindow *)window);
+
+  g_signal_connect (GTK_WIDGET(win), "delete_event", G_CALLBACK (gtk_widget_hide_on_delete), NULL);
+
+  GtkWidget *hbox[8];
+
+  GtkWidget *vbox = gtk_box_new(GTK_ORIENTATION_VERTICAL, 5);
+  
+  int i;
+
+  for(i=0;i<8;i++)
+    hbox[i] = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 5);
+
+  GtkWidget *event_label = gtk_label_new("Event:");
+  event_text = gtk_text_view_new();
+  gtk_box_pack_start (GTK_BOX (hbox[0]), event_label, FALSE, TRUE, 0);
+  gtk_box_pack_start (GTK_BOX (hbox[0]), event_text, TRUE, TRUE, 0);
+  gtk_widget_set_halign(event_label, GTK_ALIGN_START);
+
+  GtkWidget *site_label = gtk_label_new("Site:");
+  site_text = gtk_text_view_new();
+  gtk_box_pack_start (GTK_BOX (hbox[1]),site_label, FALSE, TRUE, 0);
+  gtk_box_pack_start (GTK_BOX (hbox[1]), site_text, TRUE, TRUE, 0);
+  gtk_widget_set_halign(site_label, GTK_ALIGN_START);
+
+  GtkWidget *date_label = gtk_label_new("Date:");
+  date_text = gtk_text_view_new();
+  gtk_box_pack_start (GTK_BOX (hbox[2]), date_label, FALSE, TRUE, 0);
+  gtk_box_pack_start (GTK_BOX (hbox[2]), date_text, TRUE, TRUE, 0);
+  gtk_widget_set_halign(date_label, GTK_ALIGN_START);
+
+  GtkWidget *round_label = gtk_label_new("Round:");
+  round_text = gtk_text_view_new();
+  gtk_box_pack_start (GTK_BOX (hbox[3]), round_label, FALSE, TRUE, 0);
+  gtk_box_pack_start (GTK_BOX (hbox[3]), round_text, TRUE, TRUE, 0);
+  gtk_widget_set_halign(round_label, GTK_ALIGN_START);
+
+  GtkWidget *white_label = gtk_label_new("White:");
+  white_text = gtk_text_view_new();
+  gtk_box_pack_start (GTK_BOX (hbox[4]), white_label, FALSE, TRUE, 0);
+  gtk_box_pack_start (GTK_BOX (hbox[4]), white_text, TRUE, TRUE, 0);
+  gtk_widget_set_halign(white_label, GTK_ALIGN_START);
+
+  GtkWidget *black_label = gtk_label_new("Black:");
+  black_text = gtk_text_view_new();
+  gtk_box_pack_start (GTK_BOX (hbox[5]), black_label, FALSE, TRUE, 0);
+  gtk_box_pack_start (GTK_BOX (hbox[5]), black_text, TRUE, TRUE, 0);
+  gtk_widget_set_halign(black_label, GTK_ALIGN_START);
+
+  GtkWidget *result_label = gtk_label_new("Result:");
+  result_text = gtk_text_view_new();
+  gtk_box_pack_start (GTK_BOX (hbox[6]), result_label, FALSE, TRUE, 0);
+  gtk_box_pack_start (GTK_BOX (hbox[6]), result_text, TRUE, TRUE, 0);
+  gtk_widget_set_halign(result_label, GTK_ALIGN_START);
+
+  GtkWidget *ok = gtk_button_new_with_label("OK");
+  GtkWidget *cancel = gtk_button_new_with_label("Cancel");
+
+  views[0] = event_text;
+  views[1] = site_text;
+  views[2] = date_text;
+  views[3] = round_text;
+  views[4] = white_text;
+  views[5] = black_text;
+  views[6] = result_text;
+
+  g_signal_connect (GTK_WIDGET(ok), "clicked", G_CALLBACK (accept_edit_non_move_data_clicked), NULL);
+  g_signal_connect (GTK_WIDGET(cancel), "clicked", G_CALLBACK (cancel_edit_non_move_data_clicked), NULL);
+
+  gtk_box_pack_start (GTK_BOX (hbox[7]), ok, TRUE, TRUE, 0);
+  gtk_box_pack_start (GTK_BOX (hbox[7]), cancel, TRUE, TRUE, 0);
+
+  for(i=0;i<8;i++)
+    gtk_box_pack_start (GTK_BOX (vbox), hbox[i], FALSE, FALSE, 0);
+
+  gtk_container_add (GTK_CONTAINER (win), vbox);
+
+  non_move_data_window = win;  
+}
+
+void get_promotion_choice_white()
+{
+  gtk_widget_show_all((GtkWidget *)prom_win_white);
+}
+
+void prom_white_clicked(GtkWidget *widget, GdkEventButton *event, gpointer data)
+{
+  int d = (int)data;
+
+  if(d == 0)        promotion_choice = 'Q';
+  else if(d == 1)   promotion_choice = 'R';
+  else if(d == 2)   promotion_choice = 'B';
+  else if(d == 3)   promotion_choice = 'N';
+
+  gtk_widget_hide(prom_win_white);
+
+  process_promotion();
+}
+
+void get_promotion_choice_black()
+{
+  gtk_widget_show_all((GtkWidget *)prom_win_black);
+}
+
+void prom_black_clicked(GtkWidget *widget, GdkEventButton *event, gpointer data)
+{
+  int d = (int)data;
+
+  if(d == 0)        promotion_choice = 'q';
+  else if(d == 1)   promotion_choice = 'r';
+  else if(d == 2)   promotion_choice = 'b';
+  else if(d == 3)   promotion_choice = 'n';
+
+  gtk_widget_hide(prom_win_black);
+
+  process_promotion();
+}
+
+void create_promotion_piece_choice_window_for_white()
+{
+  prom_win_white = gtk_window_new(GTK_WINDOW_TOPLEVEL);
+  gtk_window_set_default_size (GTK_WINDOW(prom_win_white),
+                               100, 100);
+
+  gtk_window_set_modal(GTK_WINDOW(prom_win_white), TRUE);
+
+  gtk_window_set_transient_for((GtkWindow *)prom_win_white, (GtkWindow *)window);
+
+  g_signal_connect (GTK_WIDGET(prom_win_white), "delete_event", G_CALLBACK (gtk_widget_hide_on_delete), NULL);  
+
+  GtkWidget *prom_grid = gtk_grid_new();
+
+  GtkWidget *boxes[2][2];
+  GtkWidget *images[2][2];
+
+  int i,j;
+
+  images[0][0] = gtk_image_new_from_file("icons/w_q_w.png");
+  images[0][1] = gtk_image_new_from_file("icons/w_r_w.png");
+  images[1][0] = gtk_image_new_from_file("icons/w_b_w.png");
+  images[1][1] = gtk_image_new_from_file("icons/w_n_w.png");
+
+  for(i=0; i<2; i++)
+  {
+    for(j=0;j<2;j++)
+    {
+      boxes[i][j] = gtk_event_box_new();
+      gtk_container_add(GTK_CONTAINER(boxes[i][j]), images[i][j]);
+
+      g_signal_connect(boxes[i][j], "button_press_event", G_CALLBACK(prom_white_clicked), (gpointer)(i*2+j)); 
+
+      gtk_grid_attach (GTK_GRID (prom_grid), boxes[i][j], j, i, 1, 1);
+    }
+  }
+
+  GtkWidget *vbox = gtk_box_new(GTK_ORIENTATION_VERTICAL, 5);
+
+  gtk_box_pack_start (GTK_BOX (vbox), prom_grid, FALSE, FALSE, 0);
+  gtk_container_add (GTK_CONTAINER (prom_win_white), vbox);
+
+}
+
+void create_promotion_piece_choice_window_for_black()
+{
+  prom_win_black = gtk_window_new(GTK_WINDOW_TOPLEVEL);
+  gtk_window_set_default_size (GTK_WINDOW(prom_win_black),
+                               100, 100);
+
+  gtk_window_set_modal(GTK_WINDOW(prom_win_black), TRUE);
+
+  gtk_window_set_transient_for((GtkWindow *)prom_win_black, (GtkWindow *)window);
+
+  g_signal_connect (GTK_WIDGET(prom_win_black), "delete_event", G_CALLBACK (gtk_widget_hide_on_delete), NULL);  
+
+  GtkWidget *prom_grid = gtk_grid_new();
+
+  GtkWidget *boxes[2][2];
+  GtkWidget *images[2][2];
+
+  int i,j;
+
+  images[0][0] = gtk_image_new_from_file("icons/b_q_w.png");
+  images[0][1] = gtk_image_new_from_file("icons/b_r_w.png");
+  images[1][0] = gtk_image_new_from_file("icons/b_b_w.png");
+  images[1][1] = gtk_image_new_from_file("icons/b_n_w.png");
+
+  for(i=0; i<2; i++)
+  {
+    for(j=0;j<2;j++)
+    {
+      boxes[i][j] = gtk_event_box_new();
+      gtk_container_add(GTK_CONTAINER(boxes[i][j]), images[i][j]);
+
+      g_signal_connect(boxes[i][j], "button_press_event", G_CALLBACK(prom_black_clicked), (gpointer)(i*2+j)); 
+
+      gtk_grid_attach (GTK_GRID (prom_grid), boxes[i][j], j, i, 1, 1);
+    }
+  }
+
+  GtkWidget *vbox = gtk_box_new(GTK_ORIENTATION_VERTICAL, 5);
+
+  gtk_box_pack_start (GTK_BOX (vbox), prom_grid, FALSE, FALSE, 0);
+  gtk_container_add (GTK_CONTAINER (prom_win_black), vbox);
+
 }
