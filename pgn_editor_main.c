@@ -104,6 +104,9 @@ extern int nof_plys;
 extern move_t *new_pgn_moves;
 
 void process_promotion();
+
+void undo_clicked(GtkWidget *, gpointer);
+void undo();
 //end of extern variables
 
 //forward declarations
@@ -115,6 +118,7 @@ void unhighlight_all_moves();
 void set_comment_view_text(char *);
 void populate_non_move_data();
 void create_promotion_piece_choice_window_for_white();
+void create_promotion_piece_choice_window_for_black();
 //end of forward declarations
 
 inline int min(int a, int b) { return (a <= b) ? a : b; }
@@ -585,6 +589,8 @@ void copy_fen(char **src, char **dest)
 
 void load_from_file(char *file_name)
 {
+  pgn_creation_mode = false;
+
   free_new_pgn_data_structures();
 
   in_move_text = false;
@@ -630,8 +636,6 @@ void load_from_file(char *file_name)
 
   move_no = 0;
   ply_no = 0;
-
-  pgn_creation_mode = false;
 }
 
 void load()
@@ -1009,10 +1013,15 @@ void annot()
   gtk_widget_grab_focus(annotation_text_view);
 }
 
-void edit_non_move_data_clicked(GtkWidget *widget, gpointer data)
+void edit_non_move_data()
 {
   populate_non_move_data();
   gtk_widget_show_all((GtkWidget *)non_move_data_window);
+}
+
+void edit_non_move_data_clicked(GtkWidget *widget, gpointer data)
+{
+  edit_non_move_data();
 }
 
 void annotate(GtkWidget *widget, gpointer data)
@@ -1073,6 +1082,8 @@ gboolean handle_key_press_events(GtkWidget *widget, GdkEventKey *event, gpointer
     load();
   else if(widget == (GtkWidget *)window && (event->state & GDK_CONTROL_MASK) && event->keyval == GDK_KEY_s)
     save();
+  else if(widget == (GtkWidget *)window && (event->state & GDK_CONTROL_MASK) && event->keyval == GDK_KEY_z)
+    undo();
   else if(widget == (GtkWidget *)window && event->keyval == GDK_KEY_Left)
     move_backward();
   else if(widget == (GtkWidget *)window && event->keyval == GDK_KEY_Right)
@@ -1081,6 +1092,8 @@ gboolean handle_key_press_events(GtkWidget *widget, GdkEventKey *event, gpointer
     move_to_start_pos();
   else if(widget == (GtkWidget *)window && event->keyval == GDK_KEY_End)
     move_to_end();
+  else if(widget == (GtkWidget *)window && (event->state & GDK_CONTROL_MASK) && event->keyval == GDK_KEY_e)
+    edit_non_move_data();
   else if(widget == (GtkWidget *)window && (event->state & GDK_CONTROL_MASK) && event->keyval == GDK_KEY_a)
     annot();
   else if(widget == (GtkWidget *)window && (event->state & GDK_CONTROL_MASK) && event->keyval == GDK_KEY_q)
@@ -1244,8 +1257,25 @@ void populate_moves_text_view()
 
   int i;
 
-  for(i=0; i<nof_moves; i++)
-    len += sprintf(buf+len, "%d. %s %s\n", i+1, moves[i].white_move, moves[i].black_move);
+  if(pgn_creation_mode == false)
+  {
+    for(i=0; i<nof_moves; i++)
+      len += sprintf(buf+len, "%d. %s %s\n", i+1, moves[i].white_move, moves[i].black_move);
+  }
+  else
+  {
+    int count = 0;
+    for(i=1; i<=nof_plys;i++)
+    {
+      if(i % 2 == 1)
+      {
+        count++;
+        len += sprintf(buf+len, "%d. %s ", count, new_pgn_moves[i/2].white_move);
+      }
+      else
+        len += sprintf(buf+len, "%s\n", new_pgn_moves[i/2 - 1].black_move);
+    }
+  }
 
   gtk_text_buffer_set_text(gtk_text_view_get_buffer((GtkTextView *)moves_text_view),
                              buf, 
@@ -1260,6 +1290,7 @@ GtkToolbar *create_toolbar()
   GtkWidget *new_icon = gtk_image_new_from_file ("icons/new32x32.png");
   GtkWidget *load_icon = gtk_image_new_from_file ("icons/load32x32.png");
   GtkWidget *save_icon = gtk_image_new_from_file ("icons/save32x32.png");
+  GtkWidget *undo_icon = gtk_image_new_from_file ("icons/undo.png");
   GtkWidget *backward_icon = gtk_image_new_from_file ("icons/backward.png");
   GtkWidget *forward_icon = gtk_image_new_from_file ("icons/forward.png");
   GtkWidget *edit_icon = gtk_image_new_from_file ("icons/edit.png");
@@ -1287,25 +1318,30 @@ GtkToolbar *create_toolbar()
   g_signal_connect (save_button, "clicked", G_CALLBACK (save_pgn_file), NULL);
   gtk_toolbar_insert((GtkToolbar *)toolbar, save_button, 2);
 
+  GtkToolItem *undo_button = gtk_tool_button_new(undo_icon, NULL);
+  gtk_tool_item_set_tooltip_text(undo_button, "Undo (Ctrl-Z)");
+  g_signal_connect (undo_button, "clicked", G_CALLBACK (undo_clicked), NULL);
+  gtk_toolbar_insert((GtkToolbar *)toolbar, undo_button, 3);
+
   GtkToolItem *backward_button = gtk_tool_button_new(backward_icon, NULL);
   gtk_tool_item_set_tooltip_text(backward_button, "Back (Left Arrow)");
   g_signal_connect (backward_button, "clicked", G_CALLBACK (backward), NULL);
-  gtk_toolbar_insert((GtkToolbar *)toolbar, backward_button, 3);
+  gtk_toolbar_insert((GtkToolbar *)toolbar, backward_button, 4);
 
   GtkToolItem *forward_button = gtk_tool_button_new(forward_icon, NULL);
   gtk_tool_item_set_tooltip_text(forward_button, "Forward (Right Arrow)");
   g_signal_connect (forward_button, "clicked", G_CALLBACK (forward), NULL);
-  gtk_toolbar_insert((GtkToolbar *)toolbar, forward_button, 4);
+  gtk_toolbar_insert((GtkToolbar *)toolbar, forward_button, 5);
 
   GtkToolItem *edit_button = gtk_tool_button_new(edit_icon, NULL);
   gtk_tool_item_set_tooltip_text(edit_button, "Edit Other Data (Ctrl-E)");
   g_signal_connect (edit_button, "clicked", G_CALLBACK (edit_non_move_data_clicked), NULL);
-  gtk_toolbar_insert((GtkToolbar *)toolbar, edit_button, 5);
+  gtk_toolbar_insert((GtkToolbar *)toolbar, edit_button, 6);
 
   GtkToolItem *annotate_button = gtk_tool_button_new(annotate_icon, NULL);
   gtk_tool_item_set_tooltip_text(annotate_button, "Annotate (Ctrl-A)");
   g_signal_connect (annotate_button, "clicked", G_CALLBACK (annotate), NULL);
-  gtk_toolbar_insert((GtkToolbar *)toolbar, annotate_button, 6);
+  gtk_toolbar_insert((GtkToolbar *)toolbar, annotate_button, 7);
 
   /* GtkToolItem *clear_button = gtk_tool_button_new(clear_icon, NULL); */
   /* gtk_tool_item_set_tooltip_text(clear_button, "Clear board"); */
@@ -1315,7 +1351,7 @@ GtkToolbar *create_toolbar()
   GtkToolItem *exit_button = gtk_tool_button_new(exit_icon, NULL);
   gtk_tool_item_set_tooltip_text(exit_button, "Exit (Ctrl-Q)");
   g_signal_connect (exit_button, "clicked", G_CALLBACK (quit), NULL);
-  gtk_toolbar_insert((GtkToolbar *)toolbar, exit_button, 7);
+  gtk_toolbar_insert((GtkToolbar *)toolbar, exit_button, 8);
 
   return (GtkToolbar *)toolbar;
 }

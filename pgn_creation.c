@@ -70,6 +70,7 @@ extern char *promotion_move_text;
 extern char **promotion_new_fen;
 extern char promotion_choice;
 
+extern populate_moves_text_view();
 //end of external variables;
 
 //forward declarations
@@ -1234,4 +1235,34 @@ void process_promotion()
   new_pgn_fens[new_size - 1] = promotion_new_fen;
 
   fill_grid(grid, promotion_new_fen);
+}
+
+void undo()
+{
+  if(pgn_creation_mode == true && nof_plys > 0)
+  {
+    if(current_ply == nof_plys)
+      current_ply--;
+
+    nof_plys--;
+
+    if(nof_plys % 2 == 0)
+      new_pgn_moves = (move_t *)realloc(new_pgn_moves, (nof_plys/2) * sizeof(move_t));
+
+    new_pgn_fens = (char ***)realloc(new_pgn_fens, (nof_plys+1) * sizeof(char **));
+  
+    populate_moves_text_view();
+
+    unhighlight_all_moves_new_pgn();
+
+    if(current_ply > 0)
+      highlight_ply_new_pgn(true, current_ply);
+
+    fill_grid(grid, new_pgn_fens[nof_plys]);
+  }
+}
+
+void undo_clicked(GtkWidget *widget, gpointer data)
+{
+  undo();
 }
