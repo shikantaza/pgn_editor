@@ -79,6 +79,8 @@ char **promotion_new_fen;
 char promotion_choice;
 //end of promotion logic variables
 
+enum bool board_flipped;
+
 //end of global variables
 
 //extern variables
@@ -702,51 +704,51 @@ void save()
     if (gtk_dialog_run (GTK_DIALOG (dialog)) == GTK_RESPONSE_ACCEPT)
     {
       strcpy(pgn_file_name, gtk_file_chooser_get_filename (GTK_FILE_CHOOSER (dialog)));
+
+      FILE *out = fopen(pgn_file_name, "w");
+
+      assert(out);
+
+      fprintf(out, "[Event \"%s\"]\n",  event);
+      fprintf(out, "[Site \"%s\"]\n",   site);
+      fprintf(out, "[Date \"%s\"]\n",   date);
+      fprintf(out, "[Round \"%s\"]\n",  round1);
+      fprintf(out, "[White \"%s\"]\n",  white_player);
+      fprintf(out, "[Black \"%s\"]\n",  black_player);
+      fprintf(out, "[Result \"%s\"]\n", result);  
+
+      int i;
+
+      move_t *moves_to_be_used = (pgn_creation_mode == true) ? new_pgn_moves : moves;
+
+      int move_count;
+
+      if(pgn_creation_mode == true)
+	move_count = (nof_plys % 2 == 1) ? (nof_plys / 2) + 1 : (nof_plys / 2);
+      else
+	move_count = nof_moves; 
+
+      for(i=0; i<move_count; i++)
+      {
+	fprintf(out, "%d. %s ", i+1, moves_to_be_used[i].white_move);
+	if(strlen(moves_to_be_used[i].white_comment) > 0)
+	  fprintf(out, "{%s} ", moves_to_be_used[i].white_comment);
+	fprintf(out, "%s ", moves_to_be_used[i].black_move);
+	if(strlen(moves_to_be_used[i].black_comment) > 0)
+	  fprintf(out, "{%s} ", moves_to_be_used[i].black_comment);
+      }
+
+      fprintf(out, "%s ", result);
+
+      fprintf(out, "\n");
+
+      fclose(out);
+
+      changed = false;
     }
 
     gtk_widget_destroy (dialog);
   }
-
-  FILE *out = fopen(pgn_file_name, "w");
-
-  assert(out);
-
-  fprintf(out, "[Event \"%s\"]\n",  event);
-  fprintf(out, "[Site \"%s\"]\n",   site);
-  fprintf(out, "[Date \"%s\"]\n",   date);
-  fprintf(out, "[Round \"%s\"]\n",  round1);
-  fprintf(out, "[White \"%s\"]\n",  white_player);
-  fprintf(out, "[Black \"%s\"]\n",  black_player);
-  fprintf(out, "[Result \"%s\"]\n", result);  
-
-  int i;
-
-  move_t *moves_to_be_used = (pgn_creation_mode == true) ? new_pgn_moves : moves;
-
-  int move_count;
-
-  if(pgn_creation_mode == true)
-    move_count = (nof_plys % 2 == 1) ? (nof_plys / 2) + 1 : (nof_plys / 2);
-  else
-    move_count = nof_moves; 
-
-  for(i=0; i<move_count; i++)
-  {
-    fprintf(out, "%d. %s ", i+1, moves_to_be_used[i].white_move);
-    if(strlen(moves_to_be_used[i].white_comment) > 0)
-      fprintf(out, "{%s} ", moves_to_be_used[i].white_comment);
-    fprintf(out, "%s ", moves_to_be_used[i].black_move);
-    if(strlen(moves_to_be_used[i].black_comment) > 0)
-      fprintf(out, "{%s} ", moves_to_be_used[i].black_comment);
-  }
-
-  fprintf(out, "%s ", result);
-
-  fprintf(out, "\n");
-
-  fclose(out);
-
-  changed = false;
 }
 
 void save_pgn_file(GtkWidget *widget, gpointer data)
@@ -1098,6 +1100,18 @@ gboolean handle_key_press_events(GtkWidget *widget, GdkEventKey *event, gpointer
     annot();
   else if(widget == (GtkWidget *)window && (event->state & GDK_CONTROL_MASK) && event->keyval == GDK_KEY_q)
     quit_application();
+  else if(widget == (GtkWidget *)window && (event->state & GDK_CONTROL_MASK) && event->keyval == GDK_KEY_f)
+  {
+    board_flipped = (board_flipped == true) ? false : true;
+    if(pgn_creation_mode == true)
+      fill_grid(grid, new_pgn_fens[current_ply]);
+    else
+      fill_grid(grid, fens[2*move_no + ply_no]);
+  }
+  else if(widget == (GtkWidget *)non_move_data_window && event->keyval == GDK_KEY_Escape)
+    gtk_widget_hide(non_move_data_window);
+  else if(widget == (GtkWidget *)annotation_window && event->keyval == GDK_KEY_Escape)
+    gtk_widget_hide(annotation_window);
 }
 
 int is_piece(char c)
@@ -1146,85 +1160,178 @@ void fill_grid(GtkWidget *grid, char **fen_array)
 
   remove_all_children(grid);
 
-  for (i=0; i<8; i++)
+  if(board_flipped == true)
   {
-    for (j=0; j<8; j++)
+    for (i=0; i<8; i++)
     {
-      if(fen_array[i][j] == 'K')
+      for (j=0; j<8; j++)
       {
-        if((i + j) % 2)   images[i][j] = gtk_image_new_from_file("icons/w_k_b.png");
-        else              images[i][j] = gtk_image_new_from_file("icons/w_k_w.png");
+	if(fen_array[i][j] == 'K')
+	{
+	  if((i + j) % 2)   images[7-i][7-j] = gtk_image_new_from_file("icons/w_k_b.png");
+	  else              images[7-i][7-j] = gtk_image_new_from_file("icons/w_k_w.png");
+	}
+	else if(fen_array[i][j] == 'k')
+	{
+	  if((i + j) % 2)   images[7-i][7-j] = gtk_image_new_from_file("icons/b_k_b.png");
+	  else              images[7-i][7-j] = gtk_image_new_from_file("icons/b_k_w.png");
+	}
+	else if(fen_array[i][j] == 'Q')
+	{
+	  if((i + j) % 2)   images[7-i][7-j] = gtk_image_new_from_file("icons/w_q_b.png");
+	  else              images[7-i][7-j] = gtk_image_new_from_file("icons/w_q_w.png");
+	}
+	else if(fen_array[i][j] == 'q')
+	{
+	  if((i + j) % 2)   images[7-i][7-j] = gtk_image_new_from_file("icons/b_q_b.png");
+	  else              images[7-i][7-j] = gtk_image_new_from_file("icons/b_q_w.png");
+	}
+	else if(fen_array[i][j] == 'R')
+	{
+	  if((i + j) % 2)   images[7-i][7-j] = gtk_image_new_from_file("icons/w_r_b.png");
+	  else              images[7-i][7-j] = gtk_image_new_from_file("icons/w_r_w.png");
+	}
+	else if(fen_array[i][j] == 'r')
+	{
+	  if((i + j) % 2)   images[7-i][7-j] = gtk_image_new_from_file("icons/b_r_b.png");
+	  else              images[7-i][7-j] = gtk_image_new_from_file("icons/b_r_w.png");
+	}
+	else if(fen_array[i][j] == 'N')
+	{
+	  if((i + j) % 2)   images[7-i][7-j] = gtk_image_new_from_file("icons/w_n_b.png");
+	  else              images[7-i][7-j] = gtk_image_new_from_file("icons/w_n_w.png");
+	}
+	else if(fen_array[i][j] == 'n')
+	{
+	  if((i + j) % 2)   images[7-i][7-j] = gtk_image_new_from_file("icons/b_n_b.png");
+	  else              images[7-i][7-j] = gtk_image_new_from_file("icons/b_n_w.png");
+	}      
+	else if(fen_array[i][j] == 'B')
+	{
+	  if((i + j) % 2)   images[7-i][7-j] = gtk_image_new_from_file("icons/w_b_b.png");
+	  else              images[7-i][7-j] = gtk_image_new_from_file("icons/w_b_w.png");
+	}
+	else if(fen_array[i][j] == 'b')
+	{
+	  if((i + j) % 2)   images[7-i][7-j] = gtk_image_new_from_file("icons/b_b_b.png");
+	  else              images[7-i][7-j] = gtk_image_new_from_file("icons/b_b_w.png");
+	}
+	else if(fen_array[i][j] == 'P')
+	{
+	  if((i + j) % 2)   images[7-i][7-j] = gtk_image_new_from_file("icons/w_p_b.png");
+	  else              images[7-i][7-j] = gtk_image_new_from_file("icons/w_p_w.png");
+	}
+	else if(fen_array[i][j] == 'p')
+	{
+	  if((i + j) % 2)   images[7-i][7-j] = gtk_image_new_from_file("icons/b_p_b.png");
+	  else              images[7-i][7-j] = gtk_image_new_from_file("icons/b_p_w.png");
+	}        
+	else //if(fen_array[i][j] == 0)
+	{
+	  if((i + j) % 2)
+	    images[7-i][7-j] = gtk_image_new_from_file("icons/black_square.png");
+	  else
+	    images[7-i][7-j] = gtk_image_new_from_file("icons/white_square.png");
+	}
       }
-      else if(fen_array[i][j] == 'k')
-      {
-        if((i + j) % 2)   images[i][j] = gtk_image_new_from_file("icons/b_k_b.png");
-        else              images[i][j] = gtk_image_new_from_file("icons/b_k_w.png");
-      }
-      else if(fen_array[i][j] == 'Q')
-      {
-        if((i + j) % 2)   images[i][j] = gtk_image_new_from_file("icons/w_q_b.png");
-        else              images[i][j] = gtk_image_new_from_file("icons/w_q_w.png");
-      }
-      else if(fen_array[i][j] == 'q')
-      {
-        if((i + j) % 2)   images[i][j] = gtk_image_new_from_file("icons/b_q_b.png");
-        else              images[i][j] = gtk_image_new_from_file("icons/b_q_w.png");
-      }
-      else if(fen_array[i][j] == 'R')
-      {
-        if((i + j) % 2)   images[i][j] = gtk_image_new_from_file("icons/w_r_b.png");
-        else              images[i][j] = gtk_image_new_from_file("icons/w_r_w.png");
-      }
-      else if(fen_array[i][j] == 'r')
-      {
-        if((i + j) % 2)   images[i][j] = gtk_image_new_from_file("icons/b_r_b.png");
-        else              images[i][j] = gtk_image_new_from_file("icons/b_r_w.png");
-      }
-      else if(fen_array[i][j] == 'N')
-      {
-        if((i + j) % 2)   images[i][j] = gtk_image_new_from_file("icons/w_n_b.png");
-        else              images[i][j] = gtk_image_new_from_file("icons/w_n_w.png");
-      }
-      else if(fen_array[i][j] == 'n')
-      {
-        if((i + j) % 2)   images[i][j] = gtk_image_new_from_file("icons/b_n_b.png");
-        else              images[i][j] = gtk_image_new_from_file("icons/b_n_w.png");
-      }      
-      else if(fen_array[i][j] == 'B')
-      {
-        if((i + j) % 2)   images[i][j] = gtk_image_new_from_file("icons/w_b_b.png");
-        else              images[i][j] = gtk_image_new_from_file("icons/w_b_w.png");
-      }
-      else if(fen_array[i][j] == 'b')
-      {
-        if((i + j) % 2)   images[i][j] = gtk_image_new_from_file("icons/b_b_b.png");
-        else              images[i][j] = gtk_image_new_from_file("icons/b_b_w.png");
-      }
-      else if(fen_array[i][j] == 'P')
-      {
-        if((i + j) % 2)   images[i][j] = gtk_image_new_from_file("icons/w_p_b.png");
-        else              images[i][j] = gtk_image_new_from_file("icons/w_p_w.png");
-      }
-      else if(fen_array[i][j] == 'p')
-      {
-        if((i + j) % 2)   images[i][j] = gtk_image_new_from_file("icons/b_p_b.png");
-        else              images[i][j] = gtk_image_new_from_file("icons/b_p_w.png");
-      }        
-      else //if(fen_array[i][j] == 0)
-      {
-        if((i + j) % 2)
-          images[i][j] = gtk_image_new_from_file("icons/black_square.png");
-        else
-          images[i][j] = gtk_image_new_from_file("icons/white_square.png");
-      }
+    }
 
-      boxes[i][j] = gtk_event_box_new();
-      gtk_container_add(GTK_CONTAINER(boxes[i][j]), images[i][j]);
+    for(i=0;i<8;i++)
+    {
+      for(j=0;j<8;j++)
+      {
+	boxes[i][j] = gtk_event_box_new();
+	gtk_container_add(GTK_CONTAINER(boxes[i][j]), images[i][j]);
 
-      g_signal_connect(boxes[i][j], "button_press_event", G_CALLBACK(board_clicked), (gpointer)(i*8+j)); 
+	g_signal_connect(boxes[i][j], "button_press_event", G_CALLBACK(board_clicked), (gpointer)(63 - (i*8+j))); 
 
-      //gtk_grid_attach (GTK_GRID (grid), images[i][j], j, i, 1, 1);
-      gtk_grid_attach (GTK_GRID (grid), boxes[i][j], j, i, 1, 1);
+	//gtk_grid_attach (GTK_GRID (grid), images[i][j], j, i, 1, 1);
+	gtk_grid_attach (GTK_GRID (grid), boxes[i][j], j, i, 1, 1);
+      }
+    }    
+  }
+  else
+  {
+    for (i=0; i<8; i++)
+    {
+      for (j=0; j<8; j++)
+      {
+	if(fen_array[i][j] == 'K')
+	{
+	  if((i + j) % 2)   images[i][j] = gtk_image_new_from_file("icons/w_k_b.png");
+	  else              images[i][j] = gtk_image_new_from_file("icons/w_k_w.png");
+	}
+	else if(fen_array[i][j] == 'k')
+	{
+	  if((i + j) % 2)   images[i][j] = gtk_image_new_from_file("icons/b_k_b.png");
+	  else              images[i][j] = gtk_image_new_from_file("icons/b_k_w.png");
+	}
+	else if(fen_array[i][j] == 'Q')
+	{
+	  if((i + j) % 2)   images[i][j] = gtk_image_new_from_file("icons/w_q_b.png");
+	  else              images[i][j] = gtk_image_new_from_file("icons/w_q_w.png");
+	}
+	else if(fen_array[i][j] == 'q')
+	{
+	  if((i + j) % 2)   images[i][j] = gtk_image_new_from_file("icons/b_q_b.png");
+	  else              images[i][j] = gtk_image_new_from_file("icons/b_q_w.png");
+	}
+	else if(fen_array[i][j] == 'R')
+	{
+	  if((i + j) % 2)   images[i][j] = gtk_image_new_from_file("icons/w_r_b.png");
+	  else              images[i][j] = gtk_image_new_from_file("icons/w_r_w.png");
+	}
+	else if(fen_array[i][j] == 'r')
+	{
+	  if((i + j) % 2)   images[i][j] = gtk_image_new_from_file("icons/b_r_b.png");
+	  else              images[i][j] = gtk_image_new_from_file("icons/b_r_w.png");
+	}
+	else if(fen_array[i][j] == 'N')
+	{
+	  if((i + j) % 2)   images[i][j] = gtk_image_new_from_file("icons/w_n_b.png");
+	  else              images[i][j] = gtk_image_new_from_file("icons/w_n_w.png");
+	}
+	else if(fen_array[i][j] == 'n')
+	{
+	  if((i + j) % 2)   images[i][j] = gtk_image_new_from_file("icons/b_n_b.png");
+	  else              images[i][j] = gtk_image_new_from_file("icons/b_n_w.png");
+	}      
+	else if(fen_array[i][j] == 'B')
+	{
+	  if((i + j) % 2)   images[i][j] = gtk_image_new_from_file("icons/w_b_b.png");
+	  else              images[i][j] = gtk_image_new_from_file("icons/w_b_w.png");
+	}
+	else if(fen_array[i][j] == 'b')
+	{
+	  if((i + j) % 2)   images[i][j] = gtk_image_new_from_file("icons/b_b_b.png");
+	  else              images[i][j] = gtk_image_new_from_file("icons/b_b_w.png");
+	}
+	else if(fen_array[i][j] == 'P')
+	{
+	  if((i + j) % 2)   images[i][j] = gtk_image_new_from_file("icons/w_p_b.png");
+	  else              images[i][j] = gtk_image_new_from_file("icons/w_p_w.png");
+	}
+	else if(fen_array[i][j] == 'p')
+	{
+	  if((i + j) % 2)   images[i][j] = gtk_image_new_from_file("icons/b_p_b.png");
+	  else              images[i][j] = gtk_image_new_from_file("icons/b_p_w.png");
+	}        
+	else //if(fen_array[i][j] == 0)
+	{
+	  if((i + j) % 2)
+	    images[i][j] = gtk_image_new_from_file("icons/black_square.png");
+	  else
+	    images[i][j] = gtk_image_new_from_file("icons/white_square.png");
+	}
+
+	boxes[i][j] = gtk_event_box_new();
+	gtk_container_add(GTK_CONTAINER(boxes[i][j]), images[i][j]);
+
+	g_signal_connect(boxes[i][j], "button_press_event", G_CALLBACK(board_clicked), (gpointer)(i*8+j)); 
+
+	//gtk_grid_attach (GTK_GRID (grid), images[i][j], j, i, 1, 1);
+	gtk_grid_attach (GTK_GRID (grid), boxes[i][j], j, i, 1, 1);
+      }
     }
   }
 
@@ -1365,6 +1472,11 @@ void create_annotation_window()
   gtk_window_set_transient_for((GtkWindow *)win, (GtkWindow *)window);
 
   g_signal_connect (GTK_WIDGET(win), "delete_event", G_CALLBACK (gtk_widget_hide_on_delete), NULL);
+
+  g_signal_connect(GTK_WIDGET(win), 
+                   "key_press_event", 
+                   G_CALLBACK (handle_key_press_events), 
+                   NULL);
 
   GtkWidget *vbox = gtk_box_new(GTK_ORIENTATION_VERTICAL, 5);
   GtkWidget *hbox = gtk_box_new(GTK_ORIENTATION_VERTICAL, 5);
@@ -1594,6 +1706,8 @@ int main(int argc, char *argv[])
 
   gtk_box_pack_start (GTK_BOX (vbox), (GtkWidget *)create_toolbar(), FALSE, FALSE, 0);
 
+  board_flipped = false;
+
   grid = gtk_grid_new();
 
   if(argc == 1)
@@ -1682,6 +1796,11 @@ create_non_move_data_capture_window()
   gtk_window_set_transient_for((GtkWindow *)win, (GtkWindow *)window);
 
   g_signal_connect (GTK_WIDGET(win), "delete_event", G_CALLBACK (gtk_widget_hide_on_delete), NULL);
+
+  g_signal_connect(GTK_WIDGET(win), 
+                   "key_press_event", 
+                   G_CALLBACK (handle_key_press_events), 
+                   NULL);
 
   GtkWidget *hbox[8];
 
@@ -1883,4 +2002,16 @@ void create_promotion_piece_choice_window_for_black()
   gtk_box_pack_start (GTK_BOX (vbox), prom_grid, FALSE, FALSE, 0);
   gtk_container_add (GTK_CONTAINER (prom_win_black), vbox);
 
+}
+
+void display_message(char *mesg)
+{
+  GtkDialogFlags flags = GTK_DIALOG_DESTROY_WITH_PARENT;
+  GtkDialog *dialog = gtk_message_dialog_new (window,
+					      flags,
+					      GTK_MESSAGE_ERROR,
+					      GTK_BUTTONS_CLOSE,
+					      mesg);
+  gtk_dialog_run (GTK_DIALOG (dialog));
+  gtk_widget_destroy (dialog);  
 }

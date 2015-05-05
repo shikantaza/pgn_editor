@@ -71,6 +71,7 @@ extern char **promotion_new_fen;
 extern char promotion_choice;
 
 extern populate_moves_text_view();
+extern void display_message(char *);
 //end of external variables;
 
 //forward declarations
@@ -180,7 +181,7 @@ void board_clicked(GtkWidget *widget, GdkEventButton *event, gpointer data)
     char p = new_pgn_fens[index-1][d/8][d%8]; 
     if(p<65 || p>90)
     {
-      printf("Please select a white piece to move!\n");
+      display_message("Please select a white piece to move!");
       return;
     }
 
@@ -193,7 +194,7 @@ void board_clicked(GtkWidget *widget, GdkEventButton *event, gpointer data)
     char p = new_pgn_fens[index-1][d/8][d%8]; 
     if(p<97 || p>122)
     {
-      printf("Please select a black piece to move!\n");
+      display_message("Please select a black piece to move!");
       return;
     }
 
@@ -216,7 +217,7 @@ void board_clicked(GtkWidget *widget, GdkEventButton *event, gpointer data)
 
     if(is_valid_move(selected_r, selected_c, d/8, d%8, (char **)new_pgn_fens[index-1]) == false)
     {
-      printf("Please select a valid move!\n");
+      display_message("Please select a valid move!");
       return;
     }
 
@@ -1259,6 +1260,13 @@ void undo()
       highlight_ply_new_pgn(true, current_ply);
 
     fill_grid(grid, new_pgn_fens[nof_plys]);
+
+    if(state == white_to_move)
+      state = black_to_move;
+    else if(state == black_to_move)
+      state = white_to_move;
+    else
+      assert(false);
   }
 }
 
