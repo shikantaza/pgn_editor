@@ -46,6 +46,9 @@ extern move_t *moves;
 
 extern move_t create_move(char *, char *, char *, char *);
 
+extern char pos_setup_fen_str[1000];
+
+extern enum bool pgn_file_contains_fen;
 %}
 
 %union {
@@ -64,6 +67,8 @@ extern move_t create_move(char *, char *, char *, char *);
 %token <token_value>             T_WHITE
 %token <token_value>             T_BLACK
 %token <token_value>             T_RESULT
+%token <token_value>             T_FEN
+%token <token_value>             T_SETUP
 %token <integer_value>           T_INTEGER
 %token                           T_LEFT_SQUARE_BRACKET 
 %token                           T_RIGHT_SQUARE_BRACKET
@@ -86,14 +91,22 @@ extern move_t create_move(char *, char *, char *, char *);
 %token <token_value>             T_COMMENT
 %token                           T_PERIOD
 
-%type <moves>                    moves
-%type <move>                     move
-%type <move>                     half_move
+%token                           T_ELLIPSIS_PLY
+
+%type <moves>                    middle_moves
 %type <token_value>              ply
+
+%type <moves>                    moves
+%type <move>                     special_first_move
+%type <move>                     special_last_move
+%type <move>                     first_move
+%type <move>                     regular_move
+%type <move>                     last_move
 
 %%
 
-pgn: event_tag site_tag date_tag round_tag white_tag black_tag result_tag move_text;
+pgn: event_tag site_tag date_tag round_tag white_tag black_tag result_tag moves result |
+     event_tag site_tag date_tag round_tag white_tag black_tag result_tag fen_tags moves result;
 
 event_tag:  T_LEFT_SQUARE_BRACKET T_EVENT  T_STRING_LITERAL T_RIGHT_SQUARE_BRACKET
        {
@@ -137,28 +150,75 @@ result_tag: T_LEFT_SQUARE_BRACKET T_RESULT T_STRING_LITERAL T_RIGHT_SQUARE_BRACK
          strcpy(result, $3);
        };
 
-move_text: moves result
-       |
-       moves half_move result
+fen_tags: T_LEFT_SQUARE_BRACKET T_FEN T_STRING_LITERAL T_RIGHT_SQUARE_BRACKET
+          T_LEFT_SQUARE_BRACKET T_SETUP T_STRING_LITERAL T_RIGHT_SQUARE_BRACKET
        {
-         nof_moves++;
-
-         moves = (move_t *)realloc(moves, nof_moves * sizeof(move_t));
-
-	 moves[nof_moves - 1] = $2;
+	 pgn_file_contains_fen = true;
+         memset(pos_setup_fen_str, '\0', 1000);
+         strcpy(pos_setup_fen_str, $3);
        };
 
-moves: /* empty */
+moves: first_move middle_moves last_move
        {
-	 in_move_text = true;
-         nof_moves = 0;
+	 //if($1)
+	 //{
+	   in_move_text = true;
+
+	   move_t *temp = moves;
+
+	   moves = (move_t *)malloc((nof_moves + 1) * sizeof(move_t));
+
+	   moves[0] = $1;
+
+	   if(nof_moves > 0)
+	   {
+	     int i;
+	     for(i=0; i<nof_moves; i++)
+	       moves[i+1] = temp[i];
+
+	     free(temp);
+	   }
+
+	   nof_moves++;
+	   //}
+
+	   //if($3)
+	   //{
+	   in_move_text = true;
+
+	   temp = moves;
+
+	   moves = (move_t *)malloc((nof_moves + 1) * sizeof(move_t));
+
+	   if(nof_moves > 0)
+	   {
+	     int i;
+	     for(i=0; i<nof_moves; i++)
+	       moves[i] = temp[i];
+
+	     free(temp);
+	   }
+
+	   moves[nof_moves] = $3;
+
+	   nof_moves++;	   
+	   //}
+       }
+
+first_move: /* empty */ | regular_move | special_first_move;
+
+middle_moves:
+       /* empty */
+       {
+	 nof_moves = 0;
 	 if(moves)
 	   free(moves);
 	 moves = NULL;
        }
-       |
-       moves move
+       | middle_moves regular_move
        {
+	 in_move_text = true;
+
          nof_moves++;
 
 	 if(!moves)
@@ -171,17 +231,9 @@ moves: /* empty */
          $$ = moves;
        };
 
-half_move: T_INTEGER T_PERIOD ply
-       {
-         $$ = create_move($3, "", "", "");
-       } 
-       |
-       T_INTEGER T_PERIOD ply T_COMMENT
-       {
-         $$ = create_move($3, $4, "", "");
-       };      
+last_move: /* empty */ | regular_move | special_last_move;
 
-move: T_INTEGER T_PERIOD ply ply
+regular_move: T_INTEGER T_PERIOD ply ply
        {
          $$ = create_move($3, "", $4, "");
        }
@@ -199,7 +251,29 @@ move: T_INTEGER T_PERIOD ply ply
        T_INTEGER T_PERIOD ply T_COMMENT ply T_COMMENT
        {
          $$ = create_move($3, $4, $5, $6);
-       } 
+       }
+       ;
+
+special_first_move: T_INTEGER T_PERIOD T_ELLIPSIS_PLY ply
+       {
+         $$ = create_move("...", "", $4, "");
+       }
+       | 
+       T_INTEGER T_PERIOD T_ELLIPSIS_PLY ply T_COMMENT
+       {
+         $$ = create_move("...", "", $4, $5);
+       }
+       ;
+
+special_last_move: T_INTEGER T_PERIOD ply
+       {
+         $$ = create_move($3, "", "", "");
+       }
+       |
+       T_INTEGER T_PERIOD ply T_COMMENT
+       {
+         $$ = create_move($3, $4, "", "");
+       }
        ;
 
 ply: T_KING_SIDE_CASTLE      | 

@@ -38,6 +38,8 @@ GtkWidget *non_move_data_window;
 GtkWidget *prom_win_white;
 GtkWidget *prom_win_black;
 
+GtkWidget *position_setup_window;
+
 GtkWidget *event_text;
 GtkWidget *site_text;
 GtkWidget *date_text;
@@ -81,6 +83,7 @@ char promotion_choice;
 
 enum bool board_flipped;
 
+enum bool pgn_file_contains_fen;
 //end of global variables
 
 //extern variables
@@ -93,8 +96,6 @@ extern void new_pgn_file(GtkWidget *, gpointer);
 extern void new_pgn();
 extern void board_clicked(GtkWidget *, GdkEventButton *, gpointer);
 
-extern enum bool pgn_creation_mode;
-
 extern void move_forward_new_pgn();
 extern void move_backward_new_pgn();
 
@@ -105,10 +106,17 @@ extern int current_ply;
 extern int nof_plys;
 extern move_t *new_pgn_moves;
 
-void process_promotion();
+extern void process_promotion();
 
-void undo_clicked(GtkWidget *, gpointer);
-void undo();
+extern void undo_clicked(GtkWidget *, gpointer);
+extern void undo();
+
+extern char **initial_pos_fen;
+extern enum mode current_mode;
+
+extern char pos_setup_fen_str[1000];
+extern enum bool position_setup_completed;
+extern void clear();
 //end of extern variables
 
 //forward declarations
@@ -340,6 +348,10 @@ move_t *convert_pgn(char *pgn_file_name, int *nof_moves)
 
 void update_fen(enum side s, char *move_str, char **fen_array)
 {
+  // "..." is a noop
+  if(!strcmp(move_str, "..."))
+    return;
+
   char piece_symbol, promotion_piece;
   enum bool check, mate, promotion;
 
@@ -568,6 +580,9 @@ void quit_application()
 
     free_new_pgn_data_structures();
 
+    if(initial_pos_fen)
+      free(initial_pos_fen);
+
     gtk_main_quit();
     exit(0);
   }
@@ -591,7 +606,8 @@ void copy_fen(char **src, char **dest)
 
 void load_from_file(char *file_name)
 {
-  pgn_creation_mode = false;
+  current_mode = existing_pgn;
+  pgn_file_contains_fen = false;
 
   free_new_pgn_data_structures();
 
@@ -618,7 +634,10 @@ void load_from_file(char *file_name)
       fens[i][j] = (char *)malloc(8 * sizeof(char));
   }
 
-  convert_fen_string_to_fen_array("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1", fens[0]);
+  if(pgn_file_contains_fen == true)
+    convert_fen_string_to_fen_array(pos_setup_fen_str, fens[0]);
+  else
+    convert_fen_string_to_fen_array("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1", fens[0]);
 
   for(i=0; i<nof_moves; i++)
   {
@@ -687,10 +706,10 @@ void load_pgn_file(GtkWidget *widget, gpointer data)
 
 void save()
 {
-  if(pgn_creation_mode == false && strlen(pgn_file_name) == 0)
+  if(current_mode == existing_pgn  && strlen(pgn_file_name) == 0)
     return;
 
-  if(pgn_creation_mode == true)
+  if(current_mode == pgn_from_position || current_mode == pgn_from_scratch)
   {
     GtkWidget *dialog;
 
@@ -717,13 +736,19 @@ void save()
       fprintf(out, "[Black \"%s\"]\n",  black_player);
       fprintf(out, "[Result \"%s\"]\n", result);  
 
+      if(current_mode == pgn_from_position)
+      {
+	fprintf(out, "[FEN \"%s\"]\n", pos_setup_fen_str);
+	fprintf(out, "[SetUp \"1\"]\n");
+      }
+
       int i;
 
-      move_t *moves_to_be_used = (pgn_creation_mode == true) ? new_pgn_moves : moves;
+      move_t *moves_to_be_used = (current_mode == pgn_from_position || current_mode == pgn_from_scratch) ? new_pgn_moves : moves;
 
       int move_count;
 
-      if(pgn_creation_mode == true)
+      if(current_mode == pgn_from_position || current_mode == pgn_from_scratch)
 	move_count = (nof_plys % 2 == 1) ? (nof_plys / 2) + 1 : (nof_plys / 2);
       else
 	move_count = nof_moves; 
@@ -822,7 +847,7 @@ void highlight_ply(enum bool highlight, int move_no, int ply_no)
 
 void move_forward()
 {
-  if(pgn_creation_mode == true)
+  if(current_mode == pgn_from_position || current_mode == pgn_from_scratch)
   {
     move_forward_new_pgn();
     return;
@@ -862,7 +887,7 @@ void move_forward()
 
 void move_backward()
 {
-  if(pgn_creation_mode == true)
+  if(current_mode == pgn_from_position || current_mode == pgn_from_scratch)
   {
     move_backward_new_pgn();
     return;
@@ -957,7 +982,7 @@ void cancel_edit_non_move_data_clicked(GtkWidget *widget, gpointer data)
 
 void accept_comment(GtkWidget *widget, gpointer data)
 {
-  if(pgn_creation_mode == true)
+  if(current_mode == pgn_from_position || current_mode == pgn_from_scratch)
   {
     accept_comment_new_pgn(widget, data);
     return;
@@ -998,7 +1023,7 @@ void cancel_comment(GtkWidget *widget, gpointer data)
 
 void annot()
 {
-  if(pgn_creation_mode == true)
+  if(current_mode == pgn_from_position || current_mode == pgn_from_scratch)
   {
     annot_new_pgn();
     return;
@@ -1038,7 +1063,7 @@ void clear_board(GtkWidget *widget, gpointer data)
 
 void move_to_start_pos()
 {
-  if(pgn_creation_mode == true)
+  if(current_mode == pgn_from_position || current_mode == pgn_from_scratch)
   {
     unhighlight_all_moves_new_pgn();
     current_ply = 0;
@@ -1054,7 +1079,7 @@ void move_to_start_pos()
 
 void move_to_end()
 {
-  if(pgn_creation_mode == true)
+  if(current_mode == pgn_from_position || current_mode == pgn_from_scratch)
   {
     current_ply = nof_plys;
     unhighlight_all_moves_new_pgn();
@@ -1074,6 +1099,23 @@ void move_to_end()
   highlight_ply(true, move_no, ply_no);
 
   fill_grid(grid, fens[2*move_no + ply_no]);
+}
+
+void position_setup()
+{
+  clear();
+  
+  gtk_text_buffer_set_text(gtk_text_view_get_buffer((GtkTextView *)comment_text_view), "", -1);
+  gtk_text_buffer_set_text(gtk_text_view_get_buffer((GtkTextView *)moves_text_view), "", -1);
+
+  current_mode = pgn_from_position;
+  position_setup_completed = false;
+  gtk_widget_show_all(position_setup_window);
+}
+
+void position_setup_toolbar_clicked(GtkWidget *widget, gpointer data)
+{
+  position_setup();
 }
 
 gboolean handle_key_press_events(GtkWidget *widget, GdkEventKey *event, gpointer user_data)
@@ -1103,15 +1145,21 @@ gboolean handle_key_press_events(GtkWidget *widget, GdkEventKey *event, gpointer
   else if(widget == (GtkWidget *)window && (event->state & GDK_CONTROL_MASK) && event->keyval == GDK_KEY_f)
   {
     board_flipped = (board_flipped == true) ? false : true;
-    if(pgn_creation_mode == true)
+    if(current_mode == pgn_from_position || current_mode == pgn_from_scratch)
       fill_grid(grid, new_pgn_fens[current_ply]);
     else
       fill_grid(grid, fens[2*move_no + ply_no]);
+  }
+  else if(widget == (GtkWidget *)window && (event->state & GDK_CONTROL_MASK) && event->keyval == GDK_KEY_p)
+  {
+    position_setup();
   }
   else if(widget == (GtkWidget *)non_move_data_window && event->keyval == GDK_KEY_Escape)
     gtk_widget_hide(non_move_data_window);
   else if(widget == (GtkWidget *)annotation_window && event->keyval == GDK_KEY_Escape)
     gtk_widget_hide(annotation_window);
+  else
+    return FALSE;
 }
 
 int is_piece(char c)
@@ -1335,7 +1383,7 @@ void fill_grid(GtkWidget *grid, char **fen_array)
     }
   }
 
-  if(pgn_creation_mode == true)
+  if(current_mode == pgn_from_position || current_mode == pgn_from_scratch)
   {
     display_comment_new_pgn();
     gtk_widget_show_all((GtkWidget *)window);
@@ -1364,7 +1412,7 @@ void populate_moves_text_view()
 
   int i;
 
-  if(pgn_creation_mode == false)
+  if(current_mode != pgn_from_position && current_mode != pgn_from_scratch)
   {
     for(i=0; i<nof_moves; i++)
       len += sprintf(buf+len, "%d. %s %s\n", i+1, moves[i].white_move, moves[i].black_move);
@@ -1395,6 +1443,7 @@ GtkToolbar *create_toolbar()
   GtkWidget *toolbar;
 
   GtkWidget *new_icon = gtk_image_new_from_file ("icons/new32x32.png");
+  GtkWidget *pos_icon = gtk_image_new_from_file ("icons/pos_setup.png");
   GtkWidget *load_icon = gtk_image_new_from_file ("icons/load32x32.png");
   GtkWidget *save_icon = gtk_image_new_from_file ("icons/save32x32.png");
   GtkWidget *undo_icon = gtk_image_new_from_file ("icons/undo.png");
@@ -1415,40 +1464,45 @@ GtkToolbar *create_toolbar()
   g_signal_connect (new_button, "clicked", G_CALLBACK (new_pgn_file), NULL);
   gtk_toolbar_insert((GtkToolbar *)toolbar, new_button, 0);
 
+  GtkToolItem *pos_button = gtk_tool_button_new(pos_icon, NULL);
+  gtk_tool_item_set_tooltip_text(pos_button, "Set Up Position (Ctrl-P)");
+  g_signal_connect (pos_button, "clicked", G_CALLBACK (position_setup_toolbar_clicked), NULL);
+  gtk_toolbar_insert((GtkToolbar *)toolbar, pos_button, 1);
+
   GtkToolItem *load_button = gtk_tool_button_new(load_icon, NULL);
   gtk_tool_item_set_tooltip_text(load_button, "Load PGN (Ctrl-L)");
   g_signal_connect (load_button, "clicked", G_CALLBACK (load_pgn_file), NULL);
-  gtk_toolbar_insert((GtkToolbar *)toolbar, load_button, 1);
+  gtk_toolbar_insert((GtkToolbar *)toolbar, load_button, 2);
 
   GtkToolItem *save_button = gtk_tool_button_new(save_icon, NULL);
   gtk_tool_item_set_tooltip_text(save_button, "Save PGN (Ctrl-S)");
   g_signal_connect (save_button, "clicked", G_CALLBACK (save_pgn_file), NULL);
-  gtk_toolbar_insert((GtkToolbar *)toolbar, save_button, 2);
+  gtk_toolbar_insert((GtkToolbar *)toolbar, save_button, 3);
 
   GtkToolItem *undo_button = gtk_tool_button_new(undo_icon, NULL);
   gtk_tool_item_set_tooltip_text(undo_button, "Undo (Ctrl-Z)");
   g_signal_connect (undo_button, "clicked", G_CALLBACK (undo_clicked), NULL);
-  gtk_toolbar_insert((GtkToolbar *)toolbar, undo_button, 3);
+  gtk_toolbar_insert((GtkToolbar *)toolbar, undo_button, 4);
 
   GtkToolItem *backward_button = gtk_tool_button_new(backward_icon, NULL);
   gtk_tool_item_set_tooltip_text(backward_button, "Back (Left Arrow)");
   g_signal_connect (backward_button, "clicked", G_CALLBACK (backward), NULL);
-  gtk_toolbar_insert((GtkToolbar *)toolbar, backward_button, 4);
+  gtk_toolbar_insert((GtkToolbar *)toolbar, backward_button, 5);
 
   GtkToolItem *forward_button = gtk_tool_button_new(forward_icon, NULL);
   gtk_tool_item_set_tooltip_text(forward_button, "Forward (Right Arrow)");
   g_signal_connect (forward_button, "clicked", G_CALLBACK (forward), NULL);
-  gtk_toolbar_insert((GtkToolbar *)toolbar, forward_button, 5);
+  gtk_toolbar_insert((GtkToolbar *)toolbar, forward_button, 6);
 
   GtkToolItem *edit_button = gtk_tool_button_new(edit_icon, NULL);
   gtk_tool_item_set_tooltip_text(edit_button, "Edit Other Data (Ctrl-E)");
   g_signal_connect (edit_button, "clicked", G_CALLBACK (edit_non_move_data_clicked), NULL);
-  gtk_toolbar_insert((GtkToolbar *)toolbar, edit_button, 6);
+  gtk_toolbar_insert((GtkToolbar *)toolbar, edit_button, 7);
 
   GtkToolItem *annotate_button = gtk_tool_button_new(annotate_icon, NULL);
   gtk_tool_item_set_tooltip_text(annotate_button, "Annotate (Ctrl-A)");
   g_signal_connect (annotate_button, "clicked", G_CALLBACK (annotate), NULL);
-  gtk_toolbar_insert((GtkToolbar *)toolbar, annotate_button, 7);
+  gtk_toolbar_insert((GtkToolbar *)toolbar, annotate_button, 8);
 
   /* GtkToolItem *clear_button = gtk_tool_button_new(clear_icon, NULL); */
   /* gtk_tool_item_set_tooltip_text(clear_button, "Clear board"); */
@@ -1458,7 +1512,7 @@ GtkToolbar *create_toolbar()
   GtkToolItem *exit_button = gtk_tool_button_new(exit_icon, NULL);
   gtk_tool_item_set_tooltip_text(exit_button, "Exit (Ctrl-Q)");
   g_signal_connect (exit_button, "clicked", G_CALLBACK (quit), NULL);
-  gtk_toolbar_insert((GtkToolbar *)toolbar, exit_button, 8);
+  gtk_toolbar_insert((GtkToolbar *)toolbar, exit_button, 9);
 
   return (GtkToolbar *)toolbar;
 }
@@ -1468,6 +1522,8 @@ void create_annotation_window()
   GtkWidget *win = gtk_window_new(GTK_WINDOW_TOPLEVEL);
   gtk_window_set_default_size (GTK_WINDOW(win),
                                500, 200);
+
+  gtk_window_set_modal(win, TRUE);
 
   gtk_window_set_transient_for((GtkWindow *)win, (GtkWindow *)window);
 
@@ -1618,7 +1674,7 @@ void select_move(GtkTextView *view, GdkEventButton *event, gpointer data)
     //printf("%s\n", str);
   }
 
-  if(pgn_creation_mode == true)
+  if(current_mode == pgn_from_position || current_mode == pgn_from_scratch)
   {
     unhighlight_all_moves_new_pgn();
 
@@ -1655,6 +1711,8 @@ int main(int argc, char *argv[])
   window = gtk_window_new (GTK_WINDOW_TOPLEVEL);
   gtk_window_set_default_size (GTK_WINDOW(window),
                                520, 500);
+
+  gtk_window_set_position(GTK_WINDOW(window), GTK_WIN_POS_CENTER);
 
   g_signal_connect (GTK_WIDGET(window), "destroy", G_CALLBACK (gtk_main_quit), NULL);
 
@@ -1750,6 +1808,8 @@ int main(int argc, char *argv[])
 
   create_promotion_piece_choice_window_for_white();
   create_promotion_piece_choice_window_for_black();
+
+  create_position_setup_window();
 
   gtk_main();
 
@@ -2004,10 +2064,10 @@ void create_promotion_piece_choice_window_for_black()
 
 }
 
-void display_message(char *mesg)
+void display_message(char *mesg, GtkWidget *win)
 {
   GtkDialogFlags flags = GTK_DIALOG_DESTROY_WITH_PARENT;
-  GtkDialog *dialog = gtk_message_dialog_new (window,
+  GtkDialog *dialog = gtk_message_dialog_new (win,
 					      flags,
 					      GTK_MESSAGE_ERROR,
 					      GTK_BUTTONS_CLOSE,

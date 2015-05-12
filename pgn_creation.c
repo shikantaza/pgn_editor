@@ -24,11 +24,7 @@
 
 #include "pgn_editor.h"
 
-enum board_states {white_to_move, black_to_move, piece_to_move_selected};
-
 //global variables
-enum bool pgn_creation_mode;
-
 int selected_r, selected_c;
 
 char ***new_pgn_fens;
@@ -71,7 +67,19 @@ extern char **promotion_new_fen;
 extern char promotion_choice;
 
 extern populate_moves_text_view();
-extern void display_message(char *);
+extern void display_message(char *, GtkWidget *);
+
+extern enum mode current_mode;
+extern char **initial_pos_fen;
+extern char pos_setup_selected_piece;
+
+extern enum bool pos_setup_white_to_move;
+extern enum bool pos_setup_white_o_o;
+extern enum bool pos_setup_white_o_o_o;
+extern enum bool pos_setup_black_o_o;
+extern enum bool pos_setup_black_o_o_o;
+
+extern enum bool position_setup_completed;
 //end of external variables;
 
 //forward declarations
@@ -136,7 +144,8 @@ void new_pgn()
 {
   free_new_pgn_data_structures();
 
-  pgn_creation_mode = true;
+  current_mode = pgn_from_scratch;
+  //pgn_creation_mode = true;
 
   new_pgn_fens = (char ***)malloc(sizeof(char **));
 
@@ -166,13 +175,50 @@ void new_pgn_file(GtkWidget *widget, gpointer data)
 
 void board_clicked(GtkWidget *widget, GdkEventButton *event, gpointer data)
 {
+  int d = (int)data;
+
+  if(current_mode == pgn_from_position && position_setup_completed == false)
+  {
+    //if a piece is already present in the
+    //square, clear the square
+    if(initial_pos_fen[d/8][d%8] != 0)
+      initial_pos_fen[d/8][d%8] = 0;
+    else if(pos_setup_selected_piece == 'P' && d/8 == 7 ||
+	    pos_setup_selected_piece == 'p' && d/8 == 0)
+    {
+      display_message("Pawns cannot be placed in the first/eighth ranks!", window);
+      return;
+    }
+    else if((pos_setup_selected_piece == 'K' || pos_setup_selected_piece == 'k'))
+    {
+
+      //if board already contains a king, remove that king
+      int i, j;
+
+      for(i=0;i<8;i++) {
+	for(j=0;j<8;j++) {
+	  if(initial_pos_fen[i][j] == pos_setup_selected_piece)
+	  {
+	    initial_pos_fen[i][j] = 0;
+	    //need to put double break here, but no harm if no break
+	  }
+	}
+      }
+
+      initial_pos_fen[d/8][d%8] = pos_setup_selected_piece;
+    }
+    else
+      initial_pos_fen[d/8][d%8] = pos_setup_selected_piece;
+
+    fill_grid(grid, initial_pos_fen);
+    return;
+  }
+
   //don't process mouse clicks on the
   //board unless we're at the most
   //recent move
   if(current_ply != nof_plys)
     return;
-
-  int d = (int)data;
 
   int index = nof_plys + 1;
 
@@ -181,7 +227,7 @@ void board_clicked(GtkWidget *widget, GdkEventButton *event, gpointer data)
     char p = new_pgn_fens[index-1][d/8][d%8]; 
     if(p<65 || p>90)
     {
-      display_message("Please select a white piece to move!");
+      display_message("Please select a white piece to move!", window);
       return;
     }
 
@@ -194,7 +240,7 @@ void board_clicked(GtkWidget *widget, GdkEventButton *event, gpointer data)
     char p = new_pgn_fens[index-1][d/8][d%8]; 
     if(p<97 || p>122)
     {
-      display_message("Please select a black piece to move!");
+      display_message("Please select a black piece to move!", window);
       return;
     }
 
@@ -217,7 +263,7 @@ void board_clicked(GtkWidget *widget, GdkEventButton *event, gpointer data)
 
     if(is_valid_move(selected_r, selected_c, d/8, d%8, (char **)new_pgn_fens[index-1]) == false)
     {
-      display_message("Please select a valid move!");
+      display_message("Please select a valid move!", window);
       return;
     }
 
@@ -941,6 +987,10 @@ void append_ply_to_moves_list()
     sprintf(buf, "%s\n", new_pgn_moves[nof_plys/2].black_move);
 
   gtk_text_buffer_insert(tbuffer, &ei, buf, -1);
+
+  GtkTextIter si;
+  gtk_text_buffer_get_start_iter(tbuffer, &si);
+  gtk_text_buffer_get_end_iter(tbuffer, &ei);
 }
 
 void move_forward_new_pgn()
@@ -1080,7 +1130,7 @@ void unhighlight_all_moves_new_pgn()
   for(i=1;i<=nof_plys; i++)
   {
     highlight_ply_new_pgn(false, i);
-    highlight_ply_new_pgn(false, i);
+    //highlight_ply_new_pgn(false, i);
   }
 }
 
@@ -1240,7 +1290,7 @@ void process_promotion()
 
 void undo()
 {
-  if(pgn_creation_mode == true && nof_plys > 0)
+  if((current_mode == pgn_from_position || current_mode == pgn_from_scratch) && nof_plys > 0)
   {
     if(current_ply == nof_plys)
       current_ply--;
@@ -1273,4 +1323,54 @@ void undo()
 void undo_clicked(GtkWidget *widget, gpointer data)
 {
   undo();
+}
+
+void new_pgn_from_pos()
+{
+  free_new_pgn_data_structures();
+
+  if(pos_setup_white_to_move == true)
+  {
+    state = white_to_move;
+
+    new_pgn_fens = (char ***)malloc(sizeof(char **));
+
+    new_pgn_fens[0] = initial_pos_fen;
+
+    nof_plys = 0;
+    current_ply = 0;
+
+    fill_grid(grid, initial_pos_fen);
+
+    gtk_text_buffer_set_text(gtk_text_view_get_buffer((GtkTextView *)moves_text_view), "", -1);
+  }
+  else
+  {
+    state = black_to_move;
+
+    new_pgn_fens = (char ***)malloc(2 * sizeof(char **));
+    new_pgn_fens[0] = initial_pos_fen;
+
+    char **fen = create_new_fen();
+    copy_fen(initial_pos_fen, fen);
+    new_pgn_fens[1] = fen;
+
+    nof_plys = 1;
+    current_ply = 1;
+
+    new_pgn_moves = (move_t *)malloc(sizeof(move_t));
+
+    memset(new_pgn_moves[0].white_move, '\0', 10);
+    strcpy(new_pgn_moves[0].white_move, "...");
+
+    memset(new_pgn_moves[0].white_comment, '\0', 100);
+
+    fill_grid(grid, new_pgn_fens[1]);
+
+    gtk_text_buffer_set_text(gtk_text_view_get_buffer((GtkTextView *)moves_text_view), "1. ... ", -1);
+  }
+
+  initialize_non_move_data();
+
+  gtk_text_buffer_set_text(gtk_text_view_get_buffer((GtkTextView *)comment_text_view), "", -1);
 }

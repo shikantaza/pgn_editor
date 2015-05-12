@@ -70,16 +70,20 @@ Round                                 { return T_ROUND;  }
 White                                 { return T_WHITE;  }
 Black                                 { return T_BLACK;  }
 Result                                { return T_RESULT; }
+FEN                                   { return T_FEN;    }
+SetUp                                 { return T_SETUP;  }
+
+\.\.\.                                { return T_ELLIPSIS_PLY; }
 
 \.                                    { return T_PERIOD; }
 
-O-O[+]{0,1}                           { yylval.token_value = strdup(yytext); return T_KING_SIDE_CASTLE; }
-O-O-O[+]{0,1}                         { yylval.token_value = strdup(yytext); return T_QUEEN_SIDE_CASTLE; }
-[a-h][1-8](=[QRBN])?(\+)?             { yylval.token_value = strdup(yytext); return T_PAWN_MOVE; }
-[K|Q|R|B|N][a-h][1-8](\+)?            { yylval.token_value = strdup(yytext); return T_UNAMBIG_PIECE_MOVE; }
-[R|B|N][a-h|1-8][a-h][1-8](\+)?       { yylval.token_value = strdup(yytext); return T_DISAMBIG_PIECE_MOVE; }
-[a-h]x[a-h][1-8](\+)?                 { yylval.token_value = strdup(yytext); return T_PAWN_CAPTURE; }
-[K|Q|R|B|N]x[a-h][1-8](\+)?           { yylval.token_value = strdup(yytext); return T_UNAMBIG_PIECE_CAPTURE; } 
+O-O[+]{0,1}                           { yylval.token_value = strdup(yytext); return T_KING_SIDE_CASTLE;       }
+O-O-O[+]{0,1}                         { yylval.token_value = strdup(yytext); return T_QUEEN_SIDE_CASTLE;      }
+[a-h][1-8](=[QRBN])?(\+)?             { yylval.token_value = strdup(yytext); return T_PAWN_MOVE;              }
+[K|Q|R|B|N][a-h][1-8](\+)?            { yylval.token_value = strdup(yytext); return T_UNAMBIG_PIECE_MOVE;     }
+[R|B|N][a-h|1-8][a-h][1-8](\+)?       { yylval.token_value = strdup(yytext); return T_DISAMBIG_PIECE_MOVE;    }
+[a-h]x[a-h][1-8](\+)?                 { yylval.token_value = strdup(yytext); return T_PAWN_CAPTURE;           }
+[K|Q|R|B|N]x[a-h][1-8](\+)?           { yylval.token_value = strdup(yytext); return T_UNAMBIG_PIECE_CAPTURE;  } 
 [R|B|N][a-h|1-8]x[a-h][1-8](\+)?      { yylval.token_value = strdup(yytext); return T_DISAMBIG_PIECE_CAPTURE; } 
 
 1-0                                   { return T_WHITE_WIN; }

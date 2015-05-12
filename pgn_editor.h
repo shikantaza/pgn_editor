@@ -23,6 +23,10 @@ enum side {white, black};
 enum piece {king, queen, rook, bishop, knight, pawn};
 enum bool {true, false};
 
+enum board_states {white_to_move, black_to_move, piece_to_move_selected};
+
+enum mode {pgn_from_position, pgn_from_scratch, existing_pgn};
+
 typedef struct
 {
   char white_move[10];
