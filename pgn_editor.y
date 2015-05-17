@@ -184,24 +184,24 @@ moves: first_move middle_moves last_move
 
 	   //if($3)
 	   //{
-	   in_move_text = true;
+	   /* in_move_text = true; */
 
-	   temp = moves;
+	   /* temp = moves; */
 
-	   moves = (move_t *)malloc((nof_moves + 1) * sizeof(move_t));
+	   /* moves = (move_t *)malloc((nof_moves + 1) * sizeof(move_t)); */
 
-	   if(nof_moves > 0)
-	   {
-	     int i;
-	     for(i=0; i<nof_moves; i++)
-	       moves[i] = temp[i];
+	   /* if(nof_moves > 0) */
+	   /* { */
+	   /*   int i; */
+	   /*   for(i=0; i<nof_moves; i++) */
+	   /*     moves[i] = temp[i]; */
 
-	     free(temp);
-	   }
+	   /*   free(temp); */
+	   /* } */
 
-	   moves[nof_moves] = $3;
+	   /* moves[nof_moves] = $3; */
 
-	   nof_moves++;	   
+	   /* nof_moves++;	   */ 
 	   //}
        }
 

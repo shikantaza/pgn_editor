@@ -571,11 +571,16 @@ void quit_application()
       for(i=0;i<2*nof_moves+1;i++)
       {
 	for(j=0;j<8;j++)
-	  if(fens[i][j])free(fens[i][j]);
+	  if(fens[i][j]) {
+	    free(fens[i][j]);
+	    fens[i][j] = NULL;
+	  }
 
 	free(fens[i]);
+	fens[i] = NULL;
       }
       free(fens);
+      fens = NULL;
     }
 
     free_new_pgn_data_structures();

@@ -35,7 +35,11 @@ move_t *new_pgn_moves;
 
 enum board_states state;
 
-enum bool white_can_castle, black_can_castle;
+enum bool white_can_castle_o_o, black_can_castle_o_o;
+enum bool white_can_castle_o_o_o, black_can_castle_o_o_o;
+
+enum bool prev_white_can_castle_o_o, prev_black_can_castle_o_o;
+enum bool prev_white_can_castle_o_o_o, prev_black_can_castle_o_o_o;
 //end of global variables
 
 //external variables
@@ -145,7 +149,6 @@ void new_pgn()
   free_new_pgn_data_structures();
 
   current_mode = pgn_from_scratch;
-  //pgn_creation_mode = true;
 
   new_pgn_fens = (char ***)malloc(sizeof(char **));
 
@@ -267,6 +270,44 @@ void board_clicked(GtkWidget *widget, GdkEventButton *event, gpointer data)
       return;
     }
 
+    /* if(new_pgn_fens[index-1][selected_r][selected_c] == 'K') */
+    /* { */
+    /*   prev_white_can_castle_o_o = white_can_castle_o_o; */
+    /*   prev_white_can_castle_o_o_o = white_can_castle_o_o_o; */
+
+    /*   white_can_castle_o_o = false; */
+    /*   white_can_castle_o_o_o = false; */
+    /* } */
+    /* else if(new_pgn_fens[index-1][selected_r][selected_c] == 'k') */
+    /* { */
+    /*   prev_black_can_castle_o_o = black_can_castle_o_o; */
+    /*   prev_black_can_castle_o_o_o = black_can_castle_o_o_o; */
+
+    /*   black_can_castle_o_o = false; */
+    /*   black_can_castle_o_o_o = false; */
+    /* } */
+
+    if(new_pgn_fens[index-1][selected_r][selected_c] == 'R' && d == 63)
+    {
+      prev_white_can_castle_o_o = white_can_castle_o_o;
+      white_can_castle_o_o = false;
+    }
+    else if(new_pgn_fens[index-1][selected_r][selected_c] == 'R' && d == 56)
+    {
+      prev_white_can_castle_o_o_o = white_can_castle_o_o_o;
+      white_can_castle_o_o_o = false;
+    }
+    else if(new_pgn_fens[index-1][selected_r][selected_c] == 'r' && d == 0)
+    {
+      prev_black_can_castle_o_o = black_can_castle_o_o;
+      black_can_castle_o_o = false;
+    }
+    else if(new_pgn_fens[index-1][selected_r][selected_c] == 'r' && d == 7)
+    {
+      prev_black_can_castle_o_o_o = black_can_castle_o_o_o;
+      black_can_castle_o_o_o = false;
+    }
+
     char **new_fen = create_new_fen();
     copy_fen(new_pgn_fens[index-1], new_fen);
 
@@ -284,40 +325,52 @@ void board_clicked(GtkWidget *widget, GdkEventButton *event, gpointer data)
     {
       new_fen[7][7] = 0;
       new_fen[7][5] = 'R';
-      white_can_castle = false;
+      prev_white_can_castle_o_o = white_can_castle_o_o;
+      prev_white_can_castle_o_o_o = white_can_castle_o_o_o;
+      white_can_castle_o_o = false;
+      white_can_castle_o_o_o = false;
       strcpy(move_text, "O-O");
     }
     else if(piece == 'K' && 
-       selected_r == 7 &&
-       selected_c == 4 &&
-       (d/8) == 7 &&
-       (d%8) == 2)
+	    selected_r == 7 &&
+	    selected_c == 4 &&
+	    (d/8) == 7 &&
+	    (d%8) == 2)
     {
       new_fen[7][0] = 0;
       new_fen[7][3] = 'R';
-      white_can_castle = false;
+      prev_white_can_castle_o_o = white_can_castle_o_o;
+      prev_white_can_castle_o_o_o = white_can_castle_o_o_o;
+      white_can_castle_o_o = false;
+      white_can_castle_o_o_o = false;
       strcpy(move_text, "O-O-O");
     }
     else if(piece == 'k' && 
-       selected_r == 0 &&
-       selected_c == 4 &&
-       (d/8) == 0 &&
-       (d%8) == 6)
+	    selected_r == 0 &&
+	    selected_c == 4 &&
+	    (d/8) == 0 &&
+	    (d%8) == 6)
     {
       new_fen[0][7] = 0;
       new_fen[0][5] = 'r';
-      black_can_castle = false;
+      prev_black_can_castle_o_o = black_can_castle_o_o;
+      prev_black_can_castle_o_o_o = black_can_castle_o_o_o;
+      black_can_castle_o_o = false;
+      black_can_castle_o_o_o = false;
       strcpy(move_text, "O-O");
     }
     else if(piece == 'k' && 
-       selected_r == 0 &&
-       selected_c == 4 &&
-       (d/8) == 0 &&
-       (d%8) == 2)
+	    selected_r == 0 &&
+	    selected_c == 4 &&
+	    (d/8) == 0 &&
+	    (d%8) == 2)
     {
       new_fen[0][0] = 0;
       new_fen[0][3] = 'r';
-      black_can_castle = false;
+      prev_black_can_castle_o_o = black_can_castle_o_o;
+      prev_black_can_castle_o_o_o = black_can_castle_o_o_o;
+      black_can_castle_o_o = false;
+      black_can_castle_o_o_o = false;
       strcpy(move_text, "O-O-O");
     }
 
@@ -566,26 +619,26 @@ enum bool can_move_to_square(int r1, int c1,
        (c1 == c2 || abs(c1-c2) == 1))
       return true;
 
-    if(piece == 'K' && white_can_castle == true &&
+    if(piece == 'K' &&
        r1 == 7 && c1 == 4 &&
        ((r2 == 7 && c2 == 6 &&
 	 fen_array[7][5] == 0 &&
-	 fen_array[7][6] == 0) ||
+	 fen_array[7][6] == 0 && white_can_castle_o_o == true) ||
 	(r2 == 7 && c2 == 2 &&
 	 fen_array[7][1] == 0 &&
 	 fen_array[7][2] == 0 &&
-	 fen_array[7][3] == 0)) &&
+	 fen_array[7][3] == 0 && white_can_castle_o_o_o == true)) &&
        is_king_under_check(white, fen_array) == false)
       return true;
-    else if(piece == 'k' && black_can_castle == true &&
+    else if(piece == 'k' &&
        r1 == 0 && c1 == 4 &&
        ((r2 == 0 && c2 == 6 &&
 	 fen_array[0][5] == 0 &&
-	 fen_array[0][6] == 0) ||
+	 fen_array[0][6] == 0 && black_can_castle_o_o == true) ||
 	(r2 == 0 && c2 == 2 &&
 	 fen_array[0][1] == 0 &&
 	 fen_array[0][2] == 0 &&
-	 fen_array[0][3] == 0)) &&
+	 fen_array[0][3] == 0 && black_can_castle_o_o_o == true)) &&
        is_king_under_check(black, fen_array) == false)
       return true;
   }
@@ -767,9 +820,6 @@ enum bool is_valid_move(int r1, int c1,
 
   enum side s = (piece >= 65 && piece <= 90) ? white : black;
 
-  //TODO: if attempting to castle, check
-  //whether the squares between the king
-  //and the rook are under attack
   if(s == white && piece == 'K' && 
      r1 == 7 && c1 == 4 &&
      r2 == 7 && c2 == 6)
@@ -1292,6 +1342,35 @@ void undo()
 {
   if((current_mode == pgn_from_position || current_mode == pgn_from_scratch) && nof_plys > 0)
   {
+    int move_no = (current_ply % 2 == 1) ? current_ply / 2 : (current_ply - 2) / 2;
+
+    /* if(state == white_to_move && !strcmp(new_pgn_moves[move_no].black_move, "O-O")) */
+    /*   black_can_castle_o_o = true; */
+    /* else if(state == white_to_move && !strcmp(new_pgn_moves[move_no].black_move, "O-O-O")) */
+    /*   black_can_castle_o_o_o = true; */
+    /* else if(state == black_to_move && !strcmp(new_pgn_moves[move_no].white_move, "O-O")) */
+    /*   white_can_castle_o_o = true; */
+    /* else if(state == black_to_move && !strcmp(new_pgn_moves[move_no].white_move, "O-O-O")) */
+    /*   white_can_castle_o_o_o = true; */
+    if(state == white_to_move && 
+       (!strcmp(new_pgn_moves[move_no].black_move, "O-O") ||
+	!strcmp(new_pgn_moves[move_no].black_move, "O-O-O") ||
+	new_pgn_moves[move_no].black_move[0] == 'K' ||
+	new_pgn_moves[move_no].black_move[0] == 'R'))
+    {
+      black_can_castle_o_o = prev_black_can_castle_o_o;
+      black_can_castle_o_o_o = prev_black_can_castle_o_o_o;
+    }
+    else if(state == black_to_move && 
+	    (!strcmp(new_pgn_moves[move_no].white_move, "O-O") ||
+	     !strcmp(new_pgn_moves[move_no].white_move, "O-O-O") ||
+	     new_pgn_moves[move_no].white_move[0] == 'K' ||
+	     new_pgn_moves[move_no].white_move[0] == 'R'))
+    {
+      white_can_castle_o_o = prev_white_can_castle_o_o;
+      white_can_castle_o_o_o = prev_white_can_castle_o_o_o;
+    }
+
     if(current_ply == nof_plys)
       current_ply--;
 

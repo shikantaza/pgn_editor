@@ -50,6 +50,9 @@ extern void new_pgn_from_pos();
 extern enum board_states state;
 extern display_message(char *, GtkWidget *);
 extern GtkWidget *grid;
+
+enum bool white_can_castle_o_o, white_can_castle_o_o_o;
+enum bool black_can_castle_o_o, black_can_castle_o_o_o;
 //end of external variables
 
 //forward declarations
@@ -96,6 +99,11 @@ void close_clicked(GtkWidget *widget, GdkEventButton *event, gpointer data)
     state = white_to_move;
   else
     state = black_to_move;
+
+  white_can_castle_o_o   = pos_setup_white_o_o;
+  white_can_castle_o_o_o = pos_setup_white_o_o_o;
+  black_can_castle_o_o   = pos_setup_black_o_o;
+  black_can_castle_o_o_o = pos_setup_black_o_o_o;
 
   memset(pos_setup_fen_str, '\0', 1000);
 
