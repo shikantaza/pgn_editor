@@ -210,6 +210,7 @@ first_move: /* empty */ | regular_move | special_first_move;
 middle_moves:
        /* empty */
        {
+	 in_move_text = true;
 	 nof_moves = 0;
 	 if(moves)
 	   free(moves);

@@ -711,73 +711,70 @@ void load_pgn_file(GtkWidget *widget, gpointer data)
 
 void save()
 {
-  if(current_mode == existing_pgn  && strlen(pgn_file_name) == 0)
-    return;
-
-  if(current_mode == pgn_from_position || current_mode == pgn_from_scratch)
+  if(!pgn_file_name)
   {
     GtkWidget *dialog;
 
     dialog = gtk_file_chooser_dialog_new ("Save PGN File",
-                                          (GtkWindow *)window,
-                                          GTK_FILE_CHOOSER_ACTION_SAVE,
-                                          "Cancel", GTK_RESPONSE_CANCEL,
-                                          "Open", GTK_RESPONSE_ACCEPT,
-                                          NULL);
+					  (GtkWindow *)window,
+					  GTK_FILE_CHOOSER_ACTION_SAVE,
+					  "Cancel", GTK_RESPONSE_CANCEL,
+					  "Open", GTK_RESPONSE_ACCEPT,
+					  NULL);
 
     if (gtk_dialog_run (GTK_DIALOG (dialog)) == GTK_RESPONSE_ACCEPT)
-    {
       strcpy(pgn_file_name, gtk_file_chooser_get_filename (GTK_FILE_CHOOSER (dialog)));
+    gtk_widget_destroy (dialog);
+  }
 
-      FILE *out = fopen(pgn_file_name, "w");
+  if(pgn_file_name)
+  {
+    FILE *out = fopen(pgn_file_name, "w");
 
-      assert(out);
+    assert(out);
 
-      fprintf(out, "[Event \"%s\"]\n",  event);
-      fprintf(out, "[Site \"%s\"]\n",   site);
-      fprintf(out, "[Date \"%s\"]\n",   date);
-      fprintf(out, "[Round \"%s\"]\n",  round1);
-      fprintf(out, "[White \"%s\"]\n",  white_player);
-      fprintf(out, "[Black \"%s\"]\n",  black_player);
-      fprintf(out, "[Result \"%s\"]\n", result);  
+    fprintf(out, "[Event \"%s\"]\n",  event);
+    fprintf(out, "[Site \"%s\"]\n",   site);
+    fprintf(out, "[Date \"%s\"]\n",   date);
+    fprintf(out, "[Round \"%s\"]\n",  round1);
+    fprintf(out, "[White \"%s\"]\n",  white_player);
+    fprintf(out, "[Black \"%s\"]\n",  black_player);
+    fprintf(out, "[Result \"%s\"]\n", result);  
 
-      if(current_mode == pgn_from_position)
-      {
-	fprintf(out, "[FEN \"%s\"]\n", pos_setup_fen_str);
-	fprintf(out, "[SetUp \"1\"]\n");
-      }
-
-      int i;
-
-      move_t *moves_to_be_used = (current_mode == pgn_from_position || current_mode == pgn_from_scratch) ? new_pgn_moves : moves;
-
-      int move_count;
-
-      if(current_mode == pgn_from_position || current_mode == pgn_from_scratch)
-	move_count = (nof_plys % 2 == 1) ? (nof_plys / 2) + 1 : (nof_plys / 2);
-      else
-	move_count = nof_moves; 
-
-      for(i=0; i<move_count; i++)
-      {
-	fprintf(out, "%d. %s ", i+1, moves_to_be_used[i].white_move);
-	if(strlen(moves_to_be_used[i].white_comment) > 0)
-	  fprintf(out, "{%s} ", moves_to_be_used[i].white_comment);
-	fprintf(out, "%s ", moves_to_be_used[i].black_move);
-	if(strlen(moves_to_be_used[i].black_comment) > 0)
-	  fprintf(out, "{%s} ", moves_to_be_used[i].black_comment);
-      }
-
-      fprintf(out, "%s ", result);
-
-      fprintf(out, "\n");
-
-      fclose(out);
-
-      changed = false;
+    if(current_mode == pgn_from_position)
+    {
+      fprintf(out, "[FEN \"%s\"]\n", pos_setup_fen_str);
+      fprintf(out, "[SetUp \"1\"]\n");
     }
 
-    gtk_widget_destroy (dialog);
+    int i;
+
+    move_t *moves_to_be_used = (current_mode == pgn_from_position || current_mode == pgn_from_scratch) ? new_pgn_moves : moves;
+
+    int move_count;
+
+    if(current_mode == pgn_from_position || current_mode == pgn_from_scratch)
+      move_count = (nof_plys % 2 == 1) ? (nof_plys / 2) + 1 : (nof_plys / 2);
+    else
+      move_count = nof_moves; 
+
+    for(i=0; i<move_count; i++)
+    {
+      fprintf(out, "%d. %s ", i+1, moves_to_be_used[i].white_move);
+      if(strlen(moves_to_be_used[i].white_comment) > 0)
+	fprintf(out, "{%s} ", moves_to_be_used[i].white_comment);
+      fprintf(out, "%s ", moves_to_be_used[i].black_move);
+      if(strlen(moves_to_be_used[i].black_comment) > 0)
+	fprintf(out, "{%s} ", moves_to_be_used[i].black_comment);
+    }
+
+    fprintf(out, "%s ", result);
+
+    fprintf(out, "\n");
+
+    fclose(out);
+
+    changed = false;
   }
 }
 
