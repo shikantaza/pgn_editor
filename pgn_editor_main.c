@@ -227,7 +227,7 @@ move_internal(char piece, char s[2], char **fen_array, char disambig_char)
       }
       else if(disambig_char >= '1' && disambig_char <= '8')
       {
-        if(current_r == 8 - (c - '0'))
+	if(current_r == 8 - c)
           match = true;
         else
           match = false;
